@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+    <h2>रियल-टाइम अलर्ट डेमो</h2>
+    <button onclick="triggerAlert()">अलर्ट भेजें</button>
+    <script>
+        function triggerAlert() {
+            // यह अलर्ट बैकग्राउंड में Notification बनकर आएगा
+            Android.showRealTimeAlert("यह एक रियल-टाइम अलर्ट है!");
+        }
+        // हर 10 सेकंड में ऑटो-अलर्ट
+        setInterval(() => {
+            Android.showRealTimeAlert("ऑटो अलर्ट: " + new Date().toLocaleTimeString());
+        }, 10000);
+    </script>
+</body>
+</html>
