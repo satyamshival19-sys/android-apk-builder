@@ -12,29 +12,7 @@
         android:text="+ नई HTML फाइल जोड़ें"
         android:backgroundTint="#2196F3"
         android:textColor="#FFFFFF"
-        android:layout_marginBottom="8dp"/>
-
-    <!-- साउंड सेटिंग्स -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
-        <Button
-            android:id="@+id/btnSelectSound"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="रिंगटोन चुनें"
-            android:backgroundTint="#FF9800"/>
-        <SeekBar
-            android:id="@+id/seekBarVolume"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:max="100"/>
-    </LinearLayout>
+        android:layout_marginBottom="16dp"/>
 
     <TextView
         android:layout_width="match_parent"
