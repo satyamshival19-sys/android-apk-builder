@@ -17,7 +17,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="मेरी स्क्रिप्ट्स (एक बार में एक ही चलेगी):"
+        android:text="मेरी स्क्रिप्ट्स:"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
