@@ -24,16 +24,17 @@ class DisplayActivity : Activity() {
 
         val webView = findViewById<WebView>(R.id.webView)
         
-        // HTML को पूरी तरह से इंडिपेंडेंट बनाने के लिए
+        // 👇 HTML को ऑन-स्क्रीन वेब ब्राउज़र जैसी आज़ादी 👇
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
-        webView.settings.mediaPlaybackRequiresUserGesture = false // स्क्रीन खुलते ही साउंड चलेगा
+        webView.settings.mediaPlaybackRequiresUserGesture = false 
         webView.settings.allowFileAccess = true
         webView.settings.loadsImagesAutomatically = true
+        webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW // HTTP/HTTPS के लिए
         
         webView.webViewClient = WebViewClient()
         
-        // सीधे HTML लोड करें (कोई ब्रिज नहीं)
+        // Base URL (Binance) देने से इंटरनेट और API ब्लॉक नहीं होंगे
         webView.loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
     }
 
