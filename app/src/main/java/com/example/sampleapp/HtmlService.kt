@@ -19,9 +19,7 @@ class HtmlService : Service() {
         createNotificationChannel()
         try {
             startForeground(1, buildNotification())
-        } catch (e: Exception) {
-            // अगर नोटिफिकेशन परमिशन नहीं है, तो भी क्रैश न हो
-        }
+        } catch (e: Exception) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -29,23 +27,21 @@ class HtmlService : Service() {
         val file = File(filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
+        // फोन लॉक होने पर भी CPU जागता रहे
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
             wakeLock?.acquire() 
         }
 
-        // पुराना WebView डिस्ट्रॉय करें (अगर चल रहा है)
         webView?.destroy()
-
-        // नया WebView बनाएँ (WindowManager की जरूरत नहीं है)
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = WebViewClient()
             addJavascriptInterface(WebAppInterface(this@HtmlService), "Android")
             loadDataWithBaseURL(null, htmlCode, "text/html", "UTF-8", null)
-            resumeTimers() // बैकग्राउंड में टाइमर चालू रखने के लिए
+            resumeTimers() // टाइमर रुकेगा नहीं
         }
 
         return START_STICKY
@@ -64,8 +60,8 @@ class HtmlService : Service() {
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("स्क्रिप्ट रनर")
-            .setContentText("बैकग्राउंड में चल रहा है...")
+            .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
+            .setContentText("आपकी स्क्रिप्ट चल रही है...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -73,9 +69,7 @@ class HtmlService : Service() {
 
     override fun onDestroy() {
         webView?.destroy()
-        if (wakeLock?.isHeld == true) {
-            wakeLock?.release()
-        }
+        if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
 }
