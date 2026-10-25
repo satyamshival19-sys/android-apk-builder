@@ -34,7 +34,18 @@ class MainActivity : AppCompatActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        askForBatteryOptimization()
+        // सुरक्षित तरीके से बैटरी ऑप्टिमाइजेशन मांगें (क्रैश से बचने के लिए)
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            // अगर फोन सपोर्ट नहीं करता, तो चुपचाप इसे छोड़ दें
+            e.printStackTrace()
+        }
 
         if (!scriptsDir.exists()) scriptsDir.mkdirs()
 
@@ -45,15 +56,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         refreshList()
-    }
-
-    private fun askForBatteryOptimization() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            intent.data = Uri.parse("package:$packageName")
-            startActivity(intent)
-        }
     }
 
     private fun saveHtmlFile(uri: Uri) {
