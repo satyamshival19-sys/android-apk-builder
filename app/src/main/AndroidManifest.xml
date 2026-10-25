@@ -11,7 +11,7 @@
         android:allowBackup="true"
         android:label="Script Runner"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SampleApp">
+        tools:targetApi="31">
         
         <activity
             android:name=".MainActivity"
