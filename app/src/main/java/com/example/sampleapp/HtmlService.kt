@@ -3,24 +3,25 @@ package com.example.sampleapp
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.graphics.PixelFormat
 import android.os.IBinder
 import android.os.PowerManager
-import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.app.NotificationCompat
 import java.io.File
 
 class HtmlService : Service() {
-    private lateinit var webView: WebView
-    private lateinit var windowManager: WindowManager
+    private var webView: WebView? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(1, buildNotification())
+        try {
+            startForeground(1, buildNotification())
+        } catch (e: Exception) {
+            // अगर नोटिफिकेशन परमिशन नहीं है, तो भी क्रैश न हो
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -34,28 +35,18 @@ class HtmlService : Service() {
             wakeLock?.acquire() 
         }
 
-        if (this::webView.isInitialized) {
-            try { windowManager.removeView(webView) } catch (e: Exception) {}
-        }
+        // पुराना WebView डिस्ट्रॉय करें (अगर चल रहा है)
+        webView?.destroy()
 
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        // नया WebView बनाएँ (WindowManager की जरूरत नहीं है)
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = WebViewClient()
             addJavascriptInterface(WebAppInterface(this@HtmlService), "Android")
             loadDataWithBaseURL(null, htmlCode, "text/html", "UTF-8", null)
-            resumeTimers()
+            resumeTimers() // बैकग्राउंड में टाइमर चालू रखने के लिए
         }
-
-        val params = WindowManager.LayoutParams(
-            0, 0,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.RGBA_8888
-        )
-        windowManager.addView(webView, params)
 
         return START_STICKY
     }
@@ -63,10 +54,12 @@ class HtmlService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
-        )
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
     }
 
     private fun buildNotification(): Notification {
@@ -79,9 +72,7 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
-        if (this::webView.isInitialized) {
-            windowManager.removeViewImmediate(webView)
-        }
+        webView?.destroy()
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
