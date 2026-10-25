@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.app.NotificationCompat
@@ -31,7 +32,6 @@ class HtmlService : Service() {
         val file = File(filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // CPU को जगाए रखें
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
@@ -40,23 +40,23 @@ class HtmlService : Service() {
 
         webView?.destroy()
         webView = WebView(this).apply {
-            // HTML को पूरी आज़ादी
+            // 👇 बैकग्राउंड में भी ऑन-स्क्रीन जैसी आज़ादी 👇
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false 
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            
             webViewClient = WebViewClient()
             
-            // बिना किसी ब्रिज के सीधा लोड करें
+            // Base URL के साथ लोड करें
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
             
-            // टाइमर चालू रखें
             resumeTimers() 
         }
 
         return START_STICKY
     }
 
-    // ऐप बंद होने पर खुद चालू हो जाए
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         if (currentScriptName != null) {
