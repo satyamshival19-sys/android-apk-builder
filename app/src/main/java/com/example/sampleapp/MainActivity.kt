@@ -1,67 +1,96 @@
 package com.example.sampleapp
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
+import androidx.appcompat.app.AppCompatActivity
 import android.Manifest
 import java.io.File
 import java.io.FileOutputStream
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var scriptsDir: File
     private var activeSwitch: Switch? = null
     private val FILE_PICK_REQUEST = 101
+    private val SOUND_PICK_REQUEST = 102
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        try {
-            setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_main)
 
-            scriptsDir = File(filesDir, "scripts")
-            if (!scriptsDir.exists()) scriptsDir.mkdirs()
-
-            if (Build.VERSION.SDK_INT >= 33) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
-            }
-
-            listContainer = findViewById(R.id.scriptListContainer)
-            
-            findViewById<Button>(R.id.btnAddFile).setOnClickListener {
-                val intent = Intent(Intent.ACTION_GET_CONTENT)
-                intent.type = "*/*" 
-                startActivityForResult(intent, FILE_PICK_REQUEST)
-            }
-
-            refreshList()
-            
-        } catch (e: Exception) {
-            // अगर कोई गलती हो, तो ऐप बंद न होकर स्क्रीन पर एरर दिखाए
-            val tv = TextView(this)
-            tv.text = "App Error:\n${e.message}"
-            tv.setPadding(30, 30, 30, 30)
-            setContentView(tv)
+        if (Build.VERSION.SDK_INT >= 33) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
+
+        scriptsDir = File(filesDir, "scripts")
+        if (!scriptsDir.exists()) scriptsDir.mkdirs()
+
+        listContainer = findViewById(R.id.scriptListContainer)
+        
+        // फाइल जोड़ने का बटन
+        findViewById<Button>(R.id.btnAddFile).setOnClickListener {
+            val intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.type = "*/*"
+            startActivityForResult(intent, FILE_PICK_REQUEST)
+        }
+
+        // रिंगटोन सेटिंग
+        findViewById<Button>(R.id.btnSelectSound).setOnClickListener {
+            val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "अलर्ट साउंड चुनें")
+                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+            }
+            startActivityForResult(intent, SOUND_PICK_REQUEST)
+        }
+
+        // वॉल्यूम सेटिंग (0-100)
+        val seekBar = findViewById<SeekBar>(R.id.seekBarVolume)
+        val sharedPref = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+        seekBar.progress = sharedPref.getInt("volume", 80)
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                sharedPref.edit().putInt("volume", progress).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        refreshList()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == FILE_PICK_REQUEST && resultCode == RESULT_OK) {
+        
+        if (requestCode == FILE_PICK_REQUEST && resultCode == Activity.RESULT_OK) {
             val uri = data?.data
-            if (uri != null) {
-                saveHtmlFile(uri)
-            }
+            if (uri != null) saveHtmlFile(uri)
+        }
+        
+        if (requestCode == SOUND_PICK_REQUEST && resultCode == Activity.RESULT_OK) {
+            val uri: Uri? = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            val sharedPref = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+            sharedPref.edit().putString("sound_uri", uri?.toString()).apply()
+            Toast.makeText(this, "साउंड सेव हो गया!", Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun saveHtmlFile(uri: Uri) {
         try {
             val inputStream = contentResolver.openInputStream(uri)
+            // 5 फाइलों की लिमिट (आपकी शर्त के अनुसार)
+            val files = scriptsDir.listFiles { file -> file.extension == "html" }
+            if (files != null && files.size >= 5) {
+                Toast.makeText(this, "आप केवल 5 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
+                return
+            }
             val fileName = "script_" + System.currentTimeMillis() + ".html"
             val file = File(scriptsDir, fileName)
             val outputStream = FileOutputStream(file)
@@ -81,7 +110,7 @@ class MainActivity : Activity() {
         
         if (files == null || files.isEmpty()) {
             val tv = TextView(this)
-            tv.text = "कोई स्क्रिप्ट नहीं मिली। ऊपर से फाइल जोड़ें।"
+            tv.text = "कोई स्क्रिप्ट नहीं मिली।"
             listContainer.addView(tv)
             return
         }
@@ -95,11 +124,20 @@ class MainActivity : Activity() {
             val tv = TextView(this)
             tv.text = file.name
             tv.textSize = 16f
+            tv.setTextColor(android.graphics.Color.BLUE) // नीला रंग (क्लिक करने के लिए)
             tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+
+            // HTML देखने के लिए नई स्क्रीन खोलें
+            tv.setOnClickListener {
+                val intent = Intent(this, DisplayActivity::class.java)
+                intent.putExtra("SCRIPT_NAME", file.name)
+                startActivity(intent)
+            }
 
             val toggle = Switch(this)
             toggle.text = "OFF"
             
+            // एक समय पर सिर्फ एक ही चले
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
                     if (activeSwitch != null && activeSwitch != toggle) {
