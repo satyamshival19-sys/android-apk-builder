@@ -1,47 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_color"
-    tools:context=".MainActivity">
-
-    <TextView
-        android:id="@+id/welcomeText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/welcome_message"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:textColor="@color/primary_text"
-        android:layout_marginTop="100dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    android:orientation="vertical"
+    android:padding="16dp">
 
     <Button
-        android:id="@+id/clickButton"
-        android:layout_width="200dp"
-        android:layout_height="60dp"
-        android:text="@string/click_me"
-        android:textSize="18sp"
-        android:layout_marginTop="50dp"
-        android:backgroundTint="@color/button_color"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/welcomeText" />
+        android:id="@+id/btnAddFile"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="+ नई HTML फाइल जोड़ें"
+        android:backgroundTint="#2196F3"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="16dp"/>
 
     <TextView
-        android:id="@+id/countText"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/initial_count"
+        android:text="मेरी स्क्रिप्ट्स (एक बार में एक ही चलेगी):"
         android:textSize="16sp"
-        android:textColor="@color/secondary_text"
-        android:layout_marginTop="30dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/clickButton" />
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp"/>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:id="@+id/scriptListContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+</LinearLayout>
