@@ -27,7 +27,6 @@ class HtmlService : Service() {
         val file = File(filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // फोन लॉक होने पर भी CPU जागता रहे
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
@@ -40,8 +39,10 @@ class HtmlService : Service() {
             settings.domStorageEnabled = true
             webViewClient = WebViewClient()
             addJavascriptInterface(WebAppInterface(this@HtmlService), "Android")
-            loadDataWithBaseURL(null, htmlCode, "text/html", "UTF-8", null)
-            resumeTimers() // टाइमर रुकेगा नहीं
+            
+            // 👇 यहाँ भी Base URL जोड़ा है
+            loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
+            resumeTimers()
         }
 
         return START_STICKY
