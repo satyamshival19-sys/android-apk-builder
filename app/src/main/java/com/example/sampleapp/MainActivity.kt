@@ -1,43 +1,52 @@
 package com.example.sampleapp
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
 import android.Manifest
 import java.io.File
 import java.io.FileOutputStream
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     private lateinit var listContainer: LinearLayout
-    private val scriptsDir = File(filesDir, "scripts")
+    private lateinit var scriptsDir: File
     private var activeSwitch: Switch? = null
     private val FILE_PICK_REQUEST = 101
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // नोटिफिकेशन परमिशन
-        if (Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
-        }
-
-        if (!scriptsDir.exists()) scriptsDir.mkdirs()
-
-        listContainer = findViewById(R.id.scriptListContainer)
         
-        // फाइल चुनने का पुराना और सुरक्षित तरीका
-        findViewById<Button>(R.id.btnAddFile).setOnClickListener {
-            val intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.type = "*/*" // सभी फाइलें दिखेंगी
-            startActivityForResult(intent, FILE_PICK_REQUEST)
-        }
+        try {
+            setContentView(R.layout.activity_main)
 
-        refreshList()
+            scriptsDir = File(filesDir, "scripts")
+            if (!scriptsDir.exists()) scriptsDir.mkdirs()
+
+            if (Build.VERSION.SDK_INT >= 33) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
+            }
+
+            listContainer = findViewById(R.id.scriptListContainer)
+            
+            findViewById<Button>(R.id.btnAddFile).setOnClickListener {
+                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                intent.type = "*/*" 
+                startActivityForResult(intent, FILE_PICK_REQUEST)
+            }
+
+            refreshList()
+            
+        } catch (e: Exception) {
+            // अगर कोई गलती हो, तो ऐप बंद न होकर स्क्रीन पर एरर दिखाए
+            val tv = TextView(this)
+            tv.text = "App Error:\n${e.message}"
+            tv.setPadding(30, 30, 30, 30)
+            setContentView(tv)
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
