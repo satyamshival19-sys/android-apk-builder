@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.Gravity
 import android.widget.*
 import android.Manifest
@@ -21,7 +22,6 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // नोटिफिकेशन की परमिशन मांगें
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
@@ -31,7 +31,6 @@ class MainActivity : Activity() {
 
         listContainer = findViewById(R.id.scriptListContainer)
         
-        // फाइल जोड़ने का बटन
         findViewById<Button>(R.id.btnAddFile).setOnClickListener {
             val intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.type = "*/*"
@@ -51,19 +50,34 @@ class MainActivity : Activity() {
 
     private fun saveHtmlFile(uri: Uri) {
         try {
-            val inputStream = contentResolver.openInputStream(uri)
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
             if (files != null && files.size >= 5) {
                 Toast.makeText(this, "आप केवल 5 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
             }
-            val fileName = "script_" + System.currentTimeMillis() + ".html"
+
+            // 👇 असली फाइल का नाम निकालने का कोड 👇
+            var fileName = "unknown.html"
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    val originalName = cursor.getString(nameIndex)
+                    if (originalName.endsWith(".html", true)) {
+                        fileName = originalName
+                    } else {
+                        fileName = "$originalName.html"
+                    }
+                }
+            }
+
             val file = File(scriptsDir, fileName)
+            val inputStream = contentResolver.openInputStream(uri)
             val outputStream = FileOutputStream(file)
             inputStream?.copyTo(outputStream)
             inputStream?.close()
             outputStream.close()
-            Toast.makeText(this, "फाइल जुड़ गई!", Toast.LENGTH_SHORT).show()
+            
+            Toast.makeText(this, "फाइल जुड़ गई: $fileName", Toast.LENGTH_SHORT).show()
             refreshList()
         } catch (e: Exception) {
             Toast.makeText(this, "फाइल लोड करने में एरर!", Toast.LENGTH_SHORT).show()
@@ -76,7 +90,7 @@ class MainActivity : Activity() {
         
         if (files == null || files.isEmpty()) {
             val tv = TextView(this)
-            tv.text = "कोई स्क्रिप्ट नहीं मिली। ऊपर से फाइल जोड़ें।"
+            tv.text = "कोई स्क्रिप्ट नहीं मिली।"
             listContainer.addView(tv)
             return
         }
@@ -90,33 +104,31 @@ class MainActivity : Activity() {
             val tv = TextView(this)
             tv.text = file.name
             tv.textSize = 16f
-            tv.setTextColor(android.graphics.Color.BLUE)
+            
+            // 👇 यहाँ रंग लाल (RED) कर दिया गया है 👇
+            tv.setTextColor(android.graphics.Color.RED) 
+            
             tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
-            // अगर आप सिर्फ देखना चाहें बिना ON किए, तो नाम पर टैप कर सकते हैं
             tv.setOnClickListener {
                 val intent = Intent(this, DisplayActivity::class.java)
                 intent.putExtra("SCRIPT_NAME", file.name)
                 startActivity(intent)
             }
 
-            // 👇 यह है आपका ON/OFF टॉगल 👇
             val toggle = Switch(this)
             toggle.text = "OFF"
             
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    // 1. अगर कोई और स्विच ऑन है, तो उसे बंद करें (एक बार में एक ही चलेगा)
                     if (activeSwitch != null && activeSwitch != toggle) {
                         activeSwitch?.isChecked = false
                     }
                     activeSwitch = toggle
                     toggle.text = "ON"
                     
-                    // 2. बैकग्राउंड में चलाने के लिए सर्विस शुरू करें
                     startBackgroundService(file.name)
                     
-                    // 3. स्क्रीन पर देखने के लिए डिस्प्ले एक्टिविटी खोलें
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -125,11 +137,7 @@ class MainActivity : Activity() {
                     if (activeSwitch == toggle) {
                         activeSwitch = null
                         toggle.text = "OFF"
-                        
-                        // 1. बैकग्राउंड सर्विस बंद करें
                         stopService(Intent(this, HtmlService::class.java))
-                        
-                        // 2. खुली हुई स्क्रीन बंद करें
                         DisplayActivity.instance?.finish()
                     }
                 }
