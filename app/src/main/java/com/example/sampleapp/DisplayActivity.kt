@@ -8,7 +8,6 @@ import java.io.File
 
 class DisplayActivity : Activity() {
     
-    // यह लाइन हमें इस स्क्रीन को बाहर से बंद करने की शक्ति देगी
     companion object {
         var instance: DisplayActivity? = null
     }
@@ -17,7 +16,7 @@ class DisplayActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_display)
         
-        instance = this // स्क्रीन खुलते ही इसे रजिस्टर करें
+        instance = this
 
         val fileName = intent.getStringExtra("SCRIPT_NAME") ?: return
         val file = File(filesDir, "scripts/$fileName")
@@ -26,13 +25,17 @@ class DisplayActivity : Activity() {
         val webView = findViewById<WebView>(R.id.webView)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        webView.settings.allowFileAccess = true
+        webView.settings.loadsImagesAutomatically = true
         webView.webViewClient = WebViewClient()
         webView.addJavascriptInterface(WebAppInterface(this), "Android")
-        webView.loadDataWithBaseURL(null, htmlCode, "text/html", "UTF-8", null)
+        
+        // 👇 यहाँ हमने Base URL जोड़ा है ताकि API से डेटा आ सके
+        webView.loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
     }
 
     override fun onDestroy() {
-        instance = null // स्क्रीन बंद होते ही रजिस्टर से हटा दें
+        instance = null
         super.onDestroy()
     }
 }
