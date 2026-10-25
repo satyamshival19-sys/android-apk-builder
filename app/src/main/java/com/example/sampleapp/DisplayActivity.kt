@@ -23,14 +23,17 @@ class DisplayActivity : Activity() {
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
         val webView = findViewById<WebView>(R.id.webView)
+        
+        // HTML को पूरी तरह से इंडिपेंडेंट बनाने के लिए
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
+        webView.settings.mediaPlaybackRequiresUserGesture = false // स्क्रीन खुलते ही साउंड चलेगा
         webView.settings.allowFileAccess = true
         webView.settings.loadsImagesAutomatically = true
-        webView.webViewClient = WebViewClient()
-        webView.addJavascriptInterface(WebAppInterface(this), "Android")
         
-        // 👇 यहाँ हमने Base URL जोड़ा है ताकि API से डेटा आ सके
+        webView.webViewClient = WebViewClient()
+        
+        // सीधे HTML लोड करें (कोई ब्रिज नहीं)
         webView.loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
     }
 
