@@ -9,12 +9,11 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
 import android.Manifest
 import java.io.File
 import java.io.FileOutputStream
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var scriptsDir: File
     private var activeSwitch: Switch? = null
@@ -34,14 +33,14 @@ class MainActivity : AppCompatActivity() {
 
         listContainer = findViewById(R.id.scriptListContainer)
         
-        // फाइल जोड़ने का बटन
+        // फाइल जोड़ने का बटन
         findViewById<Button>(R.id.btnAddFile).setOnClickListener {
             val intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.type = "*/*"
             startActivityForResult(intent, FILE_PICK_REQUEST)
         }
 
-        // रिंगटोन सेटिंग
+        // रिंगटोन चुनने का बटन
         findViewById<Button>(R.id.btnSelectSound).setOnClickListener {
             val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
                 putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
@@ -51,7 +50,7 @@ class MainActivity : AppCompatActivity() {
             startActivityForResult(intent, SOUND_PICK_REQUEST)
         }
 
-        // वॉल्यूम सेटिंग (0-100)
+        // वॉल्यूम स्लाइडर (0-100)
         val seekBar = findViewById<SeekBar>(R.id.seekBarVolume)
         val sharedPref = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
         seekBar.progress = sharedPref.getInt("volume", 80)
@@ -85,7 +84,6 @@ class MainActivity : AppCompatActivity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val inputStream = contentResolver.openInputStream(uri)
-            // 5 फाइलों की लिमिट (आपकी शर्त के अनुसार)
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
             if (files != null && files.size >= 5) {
                 Toast.makeText(this, "आप केवल 5 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
@@ -127,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             tv.setTextColor(android.graphics.Color.BLUE) // नीला रंग (क्लिक करने के लिए)
             tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
-            // HTML देखने के लिए नई स्क्रीन खोलें
+            // अगर आप फाइल के नाम पर टैप करेंगे, तो भी स्क्रीन खुलेगी
             tv.setOnClickListener {
                 val intent = Intent(this, DisplayActivity::class.java)
                 intent.putExtra("SCRIPT_NAME", file.name)
@@ -137,20 +135,34 @@ class MainActivity : AppCompatActivity() {
             val toggle = Switch(this)
             toggle.text = "OFF"
             
-            // एक समय पर सिर्फ एक ही चले
+            // स्विच का लॉजिक (ON/OFF)
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
+                    // 1. अगर कोई और स्विच पहले से ऑन है, तो उसे बंद करें
                     if (activeSwitch != null && activeSwitch != toggle) {
                         activeSwitch?.isChecked = false
                     }
                     activeSwitch = toggle
                     toggle.text = "ON"
+                    
+                    // 2. बैकग्राउंड सर्विस शुरू करें
                     startBackgroundService(file.name)
+                    
+                    // 3. HTML स्क्रीन (DisplayActivity) खोलें
+                    val intent = Intent(this, DisplayActivity::class.java)
+                    intent.putExtra("SCRIPT_NAME", file.name)
+                    startActivity(intent)
+                    
                 } else {
                     if (activeSwitch == toggle) {
                         activeSwitch = null
                         toggle.text = "OFF"
+                        
+                        // 1. बैकग्राउंड सर्विस बंद करें
                         stopService(Intent(this, HtmlService::class.java))
+                        
+                        // 2. खुली हुई HTML स्क्रीन को बंद करें
+                        DisplayActivity.instance?.finish()
                     }
                 }
             }
