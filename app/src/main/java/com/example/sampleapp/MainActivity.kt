@@ -1,15 +1,11 @@
 package com.example.sampleapp
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.view.Gravity
 import android.widget.*
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.Manifest
 import java.io.File
@@ -19,43 +15,39 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listContainer: LinearLayout
     private val scriptsDir = File(filesDir, "scripts")
     private var activeSwitch: Switch? = null
-
-    private val getContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            saveHtmlFile(uri)
-        }
-    }
+    private val FILE_PICK_REQUEST = 101
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // नोटिफिकेशन परमिशन
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
-        }
-
-        // सुरक्षित तरीके से बैटरी ऑप्टिमाइजेशन मांगें (क्रैश से बचने के लिए)
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                intent.data = Uri.parse("package:$packageName")
-                startActivity(intent)
-            }
-        } catch (e: Exception) {
-            // अगर फोन सपोर्ट नहीं करता, तो चुपचाप इसे छोड़ दें
-            e.printStackTrace()
         }
 
         if (!scriptsDir.exists()) scriptsDir.mkdirs()
 
         listContainer = findViewById(R.id.scriptListContainer)
         
+        // फाइल चुनने का पुराना और सुरक्षित तरीका
         findViewById<Button>(R.id.btnAddFile).setOnClickListener {
-            getContent.launch("*/*")
+            val intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.type = "*/*" // सभी फाइलें दिखेंगी
+            startActivityForResult(intent, FILE_PICK_REQUEST)
         }
 
         refreshList()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == FILE_PICK_REQUEST && resultCode == RESULT_OK) {
+            val uri = data?.data
+            if (uri != null) {
+                saveHtmlFile(uri)
+            }
+        }
     }
 
     private fun saveHtmlFile(uri: Uri) {
@@ -80,7 +72,7 @@ class MainActivity : AppCompatActivity() {
         
         if (files == null || files.isEmpty()) {
             val tv = TextView(this)
-            tv.text = "कोई स्क्रिप्ट नहीं मिली।"
+            tv.text = "कोई स्क्रिप्ट नहीं मिली। ऊपर से फाइल जोड़ें।"
             listContainer.addView(tv)
             return
         }
