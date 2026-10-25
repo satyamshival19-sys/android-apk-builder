@@ -1,6 +1,7 @@
 package com.example.sampleapp
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -56,7 +57,6 @@ class MainActivity : Activity() {
                 return
             }
 
-            // 👇 असली फाइल का नाम निकालने का कोड 👇
             var fileName = "unknown.html"
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -101,21 +101,36 @@ class MainActivity : Activity() {
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(0, 20, 0, 20)
 
+            // 1. स्क्रिप्ट का नाम
             val tv = TextView(this)
             tv.text = file.name
             tv.textSize = 16f
-            
-            // 👇 यहाँ रंग लाल (RED) कर दिया गया है 👇
-            tv.setTextColor(android.graphics.Color.RED) 
-            
+            tv.setTextColor(android.graphics.Color.RED)
             tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
+            // 👇 नाम बदलने का लॉजिक (लॉन्ग प्रेस करने पर) 👇
+            tv.setOnLongClickListener {
+                showRenameDialog(file, tv)
+                true
+            }
+
+            // क्लिक करने पर HTML स्क्रीन खुलेगी
             tv.setOnClickListener {
                 val intent = Intent(this, DisplayActivity::class.java)
                 intent.putExtra("SCRIPT_NAME", file.name)
                 startActivity(intent)
             }
 
+            // 2. डिलीट बटन (🗑️)
+            val btnDelete = TextView(this)
+            btnDelete.text = "🗑️" // कचरा पेटी आइकन
+            btnDelete.textSize = 20f
+            btnDelete.setPadding(24, 0, 24, 0)
+            btnDelete.setOnClickListener {
+                showDeleteDialog(file)
+            }
+
+            // 3. टॉगल स्विच
             val toggle = Switch(this)
             toggle.text = "OFF"
             
@@ -144,9 +159,79 @@ class MainActivity : Activity() {
             }
 
             row.addView(tv)
+            row.addView(btnDelete)
             row.addView(toggle)
             listContainer.addView(row)
         }
+    }
+
+    // 👇 नाम बदलने वाला डायलॉग 👇
+    private fun showRenameDialog(file: File, tv: TextView) {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("स्क्रिप्ट का नाम बदलें")
+
+        val input = EditText(this)
+        input.setText(file.name)
+        // कर्सर को .html से पहले रखें
+        input.setSelection(file.name.lastIndexOf("."))
+        builder.setView(input)
+
+        builder.setPositiveButton("बदलें") { _, _ ->
+            var newName = input.text.toString().trim()
+            if (newName.isEmpty()) return@setPositiveButton
+            
+            if (!newName.endsWith(".html", ignoreCase = true)) {
+                newName += ".html"
+            }
+
+            if (newName == file.name) return@setPositiveButton
+
+            val newFile = File(scriptsDir, newName)
+            if (newFile.exists()) {
+                Toast.makeText(this, "इस नाम की फाइल पहले से मौजूद है!", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }
+
+            // अगर यही फाइल चल रही है, तो सर्विस बंद करें
+            if (activeSwitch != null && tv.text == file.name) {
+                stopService(Intent(this, HtmlService::class.java))
+                DisplayActivity.instance?.finish()
+                activeSwitch = null
+            }
+
+            if (file.renameTo(newFile)) {
+                Toast.makeText(this, "नाम बदल गया!", Toast.LENGTH_SHORT).show()
+                refreshList()
+            } else {
+                Toast.makeText(this, "नाम नहीं बदल पाया!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        builder.setNegativeButton("रद्द करें") { dialog, _ -> dialog.cancel() }
+        builder.show()
+    }
+
+    // 👇 फाइल डिलीट करने वाला डायलॉग 👇
+    private fun showDeleteDialog(file: File) {
+        AlertDialog.Builder(this)
+            .setTitle("डिलीट करें?")
+            .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
+            .setPositiveButton("हाँ") { _, _ ->
+                // अगर यही फाइल चल रही है, तो सर्विस बंद करें
+                if (activeSwitch != null) {
+                    stopService(Intent(this, HtmlService::class.java))
+                    DisplayActivity.instance?.finish()
+                    activeSwitch = null
+                }
+                
+                if (file.delete()) {
+                    Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
+                    refreshList()
+                } else {
+                    Toast.makeText(this, "डिलीट नहीं हो पाई!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("नहीं", null)
+            .show()
     }
 
     private fun startBackgroundService(fileName: String) {
