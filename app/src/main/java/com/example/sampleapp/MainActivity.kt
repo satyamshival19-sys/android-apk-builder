@@ -29,11 +29,17 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // 🔥 सिर्फ Overlay Permission माँगें (Battery Optimization का इंटेंट हटा दिया गया है)
+        // 🔥 परमिशन चेक (बिना इसके क्रैश होगा)
         if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "कृपया 'Display over other apps' की परमिशन दें", Toast.LENGTH_LONG).show()
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            startActivity(intent)
+            AlertDialog.Builder(this)
+                .setTitle("Permission Required")
+                .setMessage("बैकग्राउंड में चलने के लिए कृपया 'Display over other apps' की परमिशन दें।")
+                .setPositiveButton("Allow") { _, _ ->
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                }
+                .setCancelable(false)
+                .show()
         }
 
         scriptsDir = File(filesDir, "scripts")
@@ -152,12 +158,10 @@ class MainActivity : Activity() {
                     toggle.text = "ON"
                     if (!activeSwitches.contains(file.name)) activeSwitches.add(file.name)
                     
-                    // 🔥 SharedPrefs में सेव करें (Immortal Recovery के लिए)
                     getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", true).apply()
                     
                     startBackgroundService(file.name)
                     
-                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -166,7 +170,6 @@ class MainActivity : Activity() {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
                     
-                    // SharedPrefs से हटाएं
                     getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
                     
                     stopBackgroundService(file.name)
