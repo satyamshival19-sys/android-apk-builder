@@ -1,7 +1,6 @@
 package com.example.sampleapp
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -16,8 +15,10 @@ import java.io.FileOutputStream
 class MainActivity : Activity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var scriptsDir: File
-    private var activeSwitch: Switch? = null
     private val FILE_PICK_REQUEST = 101
+    
+    // Active switches ka track rakhne ke liye
+    private val activeSwitches = mutableListOf<Pair<String, Switch>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,8 +53,9 @@ class MainActivity : Activity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
-            if (files != null && files.size >= 5) {
-                Toast.makeText(this, "आप केवल 5 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
+            // 12 files ka limit
+            if (files != null && files.size >= 12) {
+                Toast.makeText(this, "आप केवल 12 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
             }
 
@@ -62,11 +64,7 @@ class MainActivity : Activity() {
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (nameIndex != -1 && cursor.moveToFirst()) {
                     val originalName = cursor.getString(nameIndex)
-                    if (originalName.endsWith(".html", true)) {
-                        fileName = originalName
-                    } else {
-                        fileName = "$originalName.html"
-                    }
+                    fileName = if (originalName.endsWith(".html", true)) originalName else "$originalName.html"
                 }
             }
 
@@ -101,60 +99,54 @@ class MainActivity : Activity() {
             row.gravity = Gravity.CENTER_VERTICAL
             row.setPadding(0, 20, 0, 20)
 
-            // 1. स्क्रिप्ट का नाम
             val tv = TextView(this)
             tv.text = file.name
             tv.textSize = 16f
             tv.setTextColor(android.graphics.Color.RED)
             tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
-            // 👇 नाम बदलने का लॉजिक (लॉन्ग प्रेस करने पर) 👇
-            tv.setOnLongClickListener {
-                showRenameDialog(file, tv)
-                true
-            }
-
-            // क्लिक करने पर HTML स्क्रीन खुलेगी
+            // Open DisplayActivity
             tv.setOnClickListener {
                 val intent = Intent(this, DisplayActivity::class.java)
                 intent.putExtra("SCRIPT_NAME", file.name)
                 startActivity(intent)
             }
 
-            // 2. डिलीट बटन (🗑️)
+            // Delete Button
             val btnDelete = TextView(this)
-            btnDelete.text = "🗑️" // कचरा पेटी आइकन
+            btnDelete.text = "🗑️"
             btnDelete.textSize = 20f
             btnDelete.setPadding(24, 0, 24, 0)
             btnDelete.setOnClickListener {
                 showDeleteDialog(file)
             }
 
-            // 3. टॉगल स्विच
             val toggle = Switch(this)
-            toggle.text = "OFF"
             
+            // Check if this file is currently active (WebView exists in Manager)
+            val isRunning = WebViewManager.activeWebViews.containsKey(file.name)
+            toggle.isChecked = isRunning
+            toggle.text = if (isRunning) "ON" else "OFF"
+            
+            if (isRunning) {
+                activeSwitches.add(Pair(file.name, toggle))
+            }
+
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    if (activeSwitch != null && activeSwitch != toggle) {
-                        activeSwitch?.isChecked = false
+                    // Limit: Maximum 4 scripts at a time
+                    if (activeSwitches.size >= 4) {
+                        toggle.isChecked = false
+                        Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
+                        return@setOnCheckedChangeListener
                     }
-                    activeSwitch = toggle
                     toggle.text = "ON"
-                    
+                    activeSwitches.add(Pair(file.name, toggle))
                     startBackgroundService(file.name)
-                    
-                    val intent = Intent(this, DisplayActivity::class.java)
-                    intent.putExtra("SCRIPT_NAME", file.name)
-                    startActivity(intent)
-                    
                 } else {
-                    if (activeSwitch == toggle) {
-                        activeSwitch = null
-                        toggle.text = "OFF"
-                        stopService(Intent(this, HtmlService::class.java))
-                        DisplayActivity.instance?.finish()
-                    }
+                    toggle.text = "OFF"
+                    activeSwitches.removeAll { it.first == file.name }
+                    stopBackgroundService(file.name)
                 }
             }
 
@@ -165,69 +157,16 @@ class MainActivity : Activity() {
         }
     }
 
-    // 👇 नाम बदलने वाला डायलॉग 👇
-    private fun showRenameDialog(file: File, tv: TextView) {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("स्क्रिप्ट का नाम बदलें")
-
-        val input = EditText(this)
-        input.setText(file.name)
-        // कर्सर को .html से पहले रखें
-        input.setSelection(file.name.lastIndexOf("."))
-        builder.setView(input)
-
-        builder.setPositiveButton("बदलें") { _, _ ->
-            var newName = input.text.toString().trim()
-            if (newName.isEmpty()) return@setPositiveButton
-            
-            if (!newName.endsWith(".html", ignoreCase = true)) {
-                newName += ".html"
-            }
-
-            if (newName == file.name) return@setPositiveButton
-
-            val newFile = File(scriptsDir, newName)
-            if (newFile.exists()) {
-                Toast.makeText(this, "इस नाम की फाइल पहले से मौजूद है!", Toast.LENGTH_SHORT).show()
-                return@setPositiveButton
-            }
-
-            // अगर यही फाइल चल रही है, तो सर्विस बंद करें
-            if (activeSwitch != null && tv.text == file.name) {
-                stopService(Intent(this, HtmlService::class.java))
-                DisplayActivity.instance?.finish()
-                activeSwitch = null
-            }
-
-            if (file.renameTo(newFile)) {
-                Toast.makeText(this, "नाम बदल गया!", Toast.LENGTH_SHORT).show()
-                refreshList()
-            } else {
-                Toast.makeText(this, "नाम नहीं बदल पाया!", Toast.LENGTH_SHORT).show()
-            }
-        }
-        builder.setNegativeButton("रद्द करें") { dialog, _ -> dialog.cancel() }
-        builder.show()
-    }
-
-    // 👇 फाइल डिलीट करने वाला डायलॉग 👇
     private fun showDeleteDialog(file: File) {
-        AlertDialog.Builder(this)
+        android.app.AlertDialog.Builder(this)
             .setTitle("डिलीट करें?")
             .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
             .setPositiveButton("हाँ") { _, _ ->
-                // अगर यही फाइल चल रही है, तो सर्विस बंद करें
-                if (activeSwitch != null) {
-                    stopService(Intent(this, HtmlService::class.java))
-                    DisplayActivity.instance?.finish()
-                    activeSwitch = null
-                }
-                
+                stopBackgroundService(file.name)
+                WebViewManager.removeWebView(file.name)
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
                     refreshList()
-                } else {
-                    Toast.makeText(this, "डिलीट नहीं हो पाई!", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("नहीं", null)
@@ -236,11 +175,19 @@ class MainActivity : Activity() {
 
     private fun startBackgroundService(fileName: String) {
         val intent = Intent(this, HtmlService::class.java)
+        intent.action = "START"
         intent.putExtra("SCRIPT_NAME", fileName)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
         }
+    }
+
+    private fun stopBackgroundService(fileName: String) {
+        val intent = Intent(this, HtmlService::class.java)
+        intent.action = "STOP"
+        intent.putExtra("SCRIPT_NAME", fileName)
+        startService(intent)
     }
 }
