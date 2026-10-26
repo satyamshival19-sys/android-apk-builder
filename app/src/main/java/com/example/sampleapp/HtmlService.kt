@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var isUserSwiped = false
 
     override fun onCreate() {
         super.onCreate()
@@ -42,7 +43,6 @@ class HtmlService : Service() {
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         } else {
-            // 🔥 Immortal Recovery: OS द्वारा किल होने पर प्रीफ्स से रीस्टार्ट करें
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val allKeys = prefs.all
             for ((key, value) in allKeys) {
@@ -77,6 +77,7 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        isUserSwiped = true
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         
@@ -87,11 +88,12 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
-        val myIntent = Intent(applicationContext, HtmlService::class.java)
-        val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
-        val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
-
+        if (!isUserSwiped) {
+            val myIntent = Intent(applicationContext, HtmlService::class.java)
+            val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+            val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+        }
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
