@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.Gravity
 import android.widget.*
 import android.Manifest
@@ -17,8 +18,6 @@ class MainActivity : Activity() {
     private lateinit var listContainer: LinearLayout
     private lateinit var scriptsDir: File
     private val FILE_PICK_REQUEST = 101
-    
-    // एक समय पर 4 स्क्रिप्ट चलाने के लिए ट्रैकिंग
     private val activeSwitches = mutableListOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,6 +26,13 @@ class MainActivity : Activity() {
 
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
+        }
+
+        // 🔥 सिर्फ Overlay Permission माँगें (Battery Optimization का इंटेंट हटा दिया गया है)
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "कृपया 'Display over other apps' की परमिशन दें", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+            startActivity(intent)
         }
 
         scriptsDir = File(filesDir, "scripts")
@@ -128,9 +134,7 @@ class MainActivity : Activity() {
             btnDelete.text = "🗑️"
             btnDelete.textSize = 20f
             btnDelete.setPadding(24, 0, 24, 0)
-            btnDelete.setOnClickListener {
-                showDeleteDialog(file)
-            }
+            btnDelete.setOnClickListener { showDeleteDialog(file) }
 
             val toggle = Switch(this)
             val isRunning = WebViewManager.activeWebViews.containsKey(file.name)
@@ -139,19 +143,18 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
+                    // पॉइंट 5: 4 स्क्रिप्ट की लिमिट
                     if (activeSwitches.size >= 4) {
                         toggle.isChecked = false
                         Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
                         return@setOnCheckedChangeListener
                     }
                     toggle.text = "ON"
-                    if (!activeSwitches.contains(file.name)) {
-                        activeSwitches.add(file.name)
-                    }
-                    // सर्विस शुरू करें
+                    if (!activeSwitches.contains(file.name)) activeSwitches.add(file.name)
+                    
                     startBackgroundService(file.name)
                     
-                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट चालू (स्क्रीन ओपन) हो जाए
+                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -173,7 +176,6 @@ class MainActivity : Activity() {
     private fun showRenameDialog(file: File) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("स्क्रिप्ट का नाम बदलें")
-
         val input = EditText(this)
         input.setText(file.name)
         input.setSelection(file.name.lastIndexOf("."))
@@ -182,7 +184,6 @@ class MainActivity : Activity() {
         builder.setPositiveButton("बदलें") { _, _ ->
             var newName = input.text.toString().trim()
             if (newName.isEmpty()) return@setPositiveButton
-            
             if (!newName.endsWith(".html", ignoreCase = true)) newName += ".html"
             if (newName == file.name) return@setPositiveButton
 
