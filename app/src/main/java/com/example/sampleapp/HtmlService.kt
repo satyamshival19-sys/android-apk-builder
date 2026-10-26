@@ -38,7 +38,8 @@ class HtmlService : Service() {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
             } else if (action == "STOP") {
-                WebViewManager.removeWebView(scriptName)
+                // 🔥 FIX: यहाँ 'this' जोड़ा गया है
+                WebViewManager.removeWebView(this, scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) {
                     stopSelf()
                 }
@@ -70,17 +71,15 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
-        // तो सारी स्क्रिप्ट बंद (डिस्ट्रॉय) हो जाएँ और टॉगल रीसेट हो जाएँ।
         isUserSwiped = true
         for (key in WebViewManager.activeWebViews.keys.toList()) {
-            WebViewManager.removeWebView(key)
+            // 🔥 FIX: यहाँ भी 'this' जोड़ा गया है
+            WebViewManager.removeWebView(this, key)
         }
         stopSelf()
     }
 
     override fun onDestroy() {
-        // 🔥 FIX 3: Immortal (अमर) फीचर - अगर OS मारे, तो 1 सेकंड में रीस्टार्ट हो
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
