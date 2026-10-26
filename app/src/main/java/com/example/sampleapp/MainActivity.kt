@@ -2,6 +2,7 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -143,7 +144,6 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    // पॉइंट 5: 4 स्क्रिप्ट की लिमिट
                     if (activeSwitches.size >= 4) {
                         toggle.isChecked = false
                         Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
@@ -151,6 +151,9 @@ class MainActivity : Activity() {
                     }
                     toggle.text = "ON"
                     if (!activeSwitches.contains(file.name)) activeSwitches.add(file.name)
+                    
+                    // 🔥 SharedPrefs में सेव करें (Immortal Recovery के लिए)
+                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", true).apply()
                     
                     startBackgroundService(file.name)
                     
@@ -162,6 +165,10 @@ class MainActivity : Activity() {
                 } else {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
+                    
+                    // SharedPrefs से हटाएं
+                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
+                    
                     stopBackgroundService(file.name)
                 }
             }
