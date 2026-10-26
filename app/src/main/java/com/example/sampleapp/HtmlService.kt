@@ -35,9 +35,7 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
-                if (DisplayActivity.instance == null) {
-                    WebViewManager.attachToWindowManager(this, scriptName, webView)
-                }
+                // 🔥 Fix: स्क्रीन खुलने से पहले WindowManager में मत डालो
             } else if (action == "STOP") {
                 WebViewManager.removeWebView(scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
