@@ -1,15 +1,17 @@
 package com.example.sampleapp
 
 import android.content.Context
+import android.graphics.PixelFormat
+import android.provider.Settings
+import android.view.WindowManager
 import android.webkit.WebView
 import java.io.File
 
 object WebViewManager {
-    // सभी चालू WebViews को नाम के साथ सेव रखेंगे
     val activeWebViews = HashMap<String, WebView>()
+    private val windowManagerViews = HashMap<String, WindowManager>()
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        // अगर WebView पहले से चल रही है, तो वही रिटर्न करो (सेटिंग सुरक्षित रहेगी)
         if (activeWebViews.containsKey(scriptName)) {
             return activeWebViews[scriptName]!!
         }
@@ -17,32 +19,44 @@ object WebViewManager {
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // नई WebView बनाओ (Exact On-Screen Condition के साथ)
         val webView = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false // साउंड बैकग्राउंड में चलेगा
+            settings.mediaPlaybackRequiresUserGesture = false
             settings.allowFileAccess = true
-            settings.allowUniversalAccessFromFileURLs = true // CORS बायपास
+            settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
             
-            // इंटरनेट और API के लिए बेस URL
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
-            
             addJavascriptInterface(WebAppInterface(context), "Android")
-            
-            // टाइमर को रुकने से रोकें
             resumeTimers()
+        }
+        
+        // 🔥 अमर फीचर: WebView को अदृश्य विंडो में डालना ताकि OS इसे मार न सके
+        if (Settings.canDrawOverlays(context)) {
+            val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val params = WindowManager.LayoutParams(
+                0, 0, 
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            try {
+                wm.addView(webView, params)
+                windowManagerViews[scriptName] = wm
+            } catch (e: Exception) {}
         }
         
         activeWebViews[scriptName] = webView
         return webView
     }
 
-    // जब टॉगल OFF हो या ऐप बंद हो, तो WebView को पूरी तरह डिस्ट्रॉय करें
     fun removeWebView(scriptName: String) {
         activeWebViews[scriptName]?.let {
             it.removeJavascriptInterface("Android")
+            windowManagerViews[scriptName]?.removeView(it)
+            windowManagerViews.remove(scriptName)
             it.destroy()
         }
         activeWebViews.remove(scriptName)
