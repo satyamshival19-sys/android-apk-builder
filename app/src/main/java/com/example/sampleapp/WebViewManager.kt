@@ -1,7 +1,6 @@
 package com.example.sampleapp
 
 import android.content.Context
-import android.webkit.WebChromeClient
 import android.webkit.WebView
 import java.io.File
 
@@ -27,15 +26,8 @@ object WebViewManager {
             settings.allowUniversalAccessFromFileURLs = true 
             settings.allowFileAccessFromFileURLs = true
             
-            // 🔥 ड्रॉपडाउन काम करने के लिए WebChromeClient जोड़ें
-            webChromeClient = WebChromeClient()
-            
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
             addJavascriptInterface(WebAppInterface(appContext), "Android")
-            
-            isFocusable = true
-            isFocusableInTouchMode = true
-            requestFocus()
             
             resumeTimers()
         }
