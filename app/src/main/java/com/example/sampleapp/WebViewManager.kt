@@ -5,6 +5,7 @@ import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebView
@@ -30,6 +31,9 @@ object WebViewManager {
             settings.allowFileAccess = true
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
+            
+            // 🔥 BLACK SCREEN FIX: Software Rendering का इस्तेमाल करें
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
             addJavascriptInterface(WebAppInterface(appContext), "Android")
@@ -61,7 +65,7 @@ object WebViewManager {
                 container.removeAllViews()
                 container.addView(webView)
                 
-                // 🔥 BLACK SCREEN FIX: रेंडरिंग को फिर से चालू करने के लिए
+                // रेंडरिंग फिर से चालू करें
                 webView.onResume()
                 webView.resumeTimers()
                 webView.requestLayout()
@@ -80,7 +84,6 @@ object WebViewManager {
                 detachFromParent(appContext, webView)
                 
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन बैकग्राउंड में सिंक रहे
                 val params = WindowManager.LayoutParams(
                     1, 1, 
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
