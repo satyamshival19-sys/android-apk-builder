@@ -29,7 +29,6 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // 🔥 परमिशन चेक (बिना इसके क्रैश होगा)
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
@@ -150,6 +149,12 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
+                    if (!Settings.canDrawOverlays(this)) {
+                        toggle.isChecked = false
+                        Toast.makeText(this, "कृपया पहले 'Display over other apps' की परमिशन दें!", Toast.LENGTH_LONG).show()
+                        return@setOnCheckedChangeListener
+                    }
+
                     if (activeSwitches.size >= 4) {
                         toggle.isChecked = false
                         Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
