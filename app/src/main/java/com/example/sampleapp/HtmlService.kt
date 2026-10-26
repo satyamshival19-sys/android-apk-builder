@@ -36,11 +36,7 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
-                if (DisplayActivity.instance == null) {
-                    if (Settings.canDrawOverlays(this)) {
-                        WebViewManager.attachToWindowManager(this, scriptName, webView)
-                    }
-                }
+                // सर्विस खुद से अटैच नहीं करेगी, DisplayActivity करेगी
             } else if (action == "STOP") {
                 WebViewManager.removeWebView(this, scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
