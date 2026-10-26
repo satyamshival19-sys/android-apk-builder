@@ -10,6 +10,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import android.provider.Settings
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -35,11 +36,17 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
+                if (DisplayActivity.instance == null) {
+                    if (Settings.canDrawOverlays(this)) {
+                        WebViewManager.attachToWindowManager(this, scriptName, webView)
+                    }
+                }
             } else if (action == "STOP") {
-                WebViewManager.removeWebView(this, scriptName) // Context पास किया
+                WebViewManager.removeWebView(this, scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         } else {
+            // Immortal Recovery
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val allKeys = prefs.all
             for ((key, value) in allKeys) {
@@ -47,7 +54,9 @@ class HtmlService : Service() {
                     val savedScript = key.replace("run_", "")
                     val webView = WebViewManager.getOrCreateWebView(this, savedScript)
                     webView.resumeTimers()
-                    WebViewManager.attachToWindowManager(this, savedScript, webView)
+                    if (Settings.canDrawOverlays(this)) {
+                        WebViewManager.attachToWindowManager(this, savedScript, webView)
+                    }
                 }
             }
         }
@@ -79,7 +88,7 @@ class HtmlService : Service() {
         prefs.edit().clear().apply()
         
         for (key in WebViewManager.activeWebViews.keys.toList()) {
-            WebViewManager.removeWebView(this, key) // Context पास किया
+            WebViewManager.removeWebView(this, key)
         }
         stopSelf()
     }
