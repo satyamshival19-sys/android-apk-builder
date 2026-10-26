@@ -2,6 +2,8 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.WebView
 
@@ -23,18 +25,25 @@ class DisplayActivity : Activity() {
             return
         }
 
-        // WebViewManager से पहले से चालू WebView उठाओ (State Preservation)
         webView = WebViewManager.getOrCreateWebView(this, fileName)
         
-        // अगर WebView पहले किसी और स्क्रीन पर थी, तो उसे उससे डिटैच करो
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        // स्क्रीन पर सेट करो
         setContentView(webView)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 🔥 BLACK SCREEN FIX: वापस आने पर WebView को रिफ्रेश करें
+        Handler(Looper.getMainLooper()).postDelayed({
+            webView?.onResume()
+            webView?.resumeTimers()
+            webView?.requestLayout()
+            webView?.invalidate()
+        }, 100)
+    }
+
     override fun onDestroy() {
-        // स्क्रीन से हटाओ, लेकिन डिस्ट्रॉय मत करो (ताकि बैकग्राउंड में चलती रहे)
         (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
