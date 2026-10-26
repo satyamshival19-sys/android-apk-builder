@@ -28,7 +28,6 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // 🔥 FIX 2: परमिशन चेक (क्रैश रोकने के लिए)
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
@@ -160,10 +159,8 @@ class MainActivity : Activity() {
                     if (!activeSwitches.contains(file.name)) {
                         activeSwitches.add(file.name)
                     }
-                    // सर्विस शुरू करें
                     startBackgroundService(file.name)
                     
-                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट चालू (स्क्रीन ओपन) हो जाए
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -206,7 +203,8 @@ class MainActivity : Activity() {
 
             if (WebViewManager.activeWebViews.containsKey(file.name)) {
                 stopBackgroundService(file.name)
-                WebViewManager.removeWebView(file.name)
+                // 🔥 FIX: यहाँ 'this' जोड़ा गया है
+                WebViewManager.removeWebView(this, file.name)
             }
 
             if (file.renameTo(newFile)) {
@@ -226,7 +224,8 @@ class MainActivity : Activity() {
             .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
             .setPositiveButton("हाँ") { _, _ ->
                 stopBackgroundService(file.name)
-                WebViewManager.removeWebView(file.name)
+                // 🔥 FIX: यहाँ 'this' जोड़ा गया है
+                WebViewManager.removeWebView(this, file.name)
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
                     refreshList()
