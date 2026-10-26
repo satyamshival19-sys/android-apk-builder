@@ -32,7 +32,7 @@ object WebViewManager {
             resumeTimers()
         }
         
-        // 🔥 अमर फीचर: WebView को अदृश्य विंडो में डालना ताकि OS इसे मार न सके
+        // 🔥 अदृश्य विंडो में डालना (Immortal Feature)
         if (Settings.canDrawOverlays(context)) {
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val params = WindowManager.LayoutParams(
