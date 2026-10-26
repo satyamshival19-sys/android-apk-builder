@@ -29,7 +29,6 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // 🔥 परमिशन चेक (बिना इसके क्रैश होगा)
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
@@ -156,7 +155,6 @@ class MainActivity : Activity() {
                         return@setOnCheckedChangeListener
                     }
 
-                    // 🔥 Point 5: एक समय पर सिर्फ 4 स्क्रिप्ट
                     if (activeSwitches.size >= 4) {
                         toggle.isChecked = false
                         Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
@@ -169,7 +167,6 @@ class MainActivity : Activity() {
                     
                     startBackgroundService(file.name)
                     
-                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
