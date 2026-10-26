@@ -1,12 +1,16 @@
 package com.example.sampleapp
 
 import android.app.Activity
+import android.graphics.PixelFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.FrameLayout
 
 class DisplayActivity : Activity() {
     
@@ -15,33 +19,32 @@ class DisplayActivity : Activity() {
     }
 
     private var webView: WebView? = null
+    private var scriptName: String? = null
+    private var container: FrameLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
-
-        val fileName = intent.getStringExtra("SCRIPT_NAME")
-        if (fileName == null) {
+        scriptName = intent.getStringExtra("SCRIPT_NAME")
+        
+        if (scriptName == null) {
             finish()
             return
         }
 
-        webView = WebViewManager.getOrCreateWebView(this, fileName)
+        // Activity Context पास कर रहे हैं ताकि ड्रॉपडाउन चले
+        webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
+        
+        container = FrameLayout(this)
+        setContentView(container)
         
         (webView?.parent as? ViewGroup)?.removeView(webView)
-        
-        // 🔥 सबसे जरुरी फिक्स: WebView को Activity का Window दें ताकि ड्रॉपडाउन खुले
-        webView?.webChromeClient = WebChromeClient()
-        webView?.isFocusable = true
-        webView?.isFocusableInTouchMode = true
-        webView?.requestFocus()
-        
-        setContentView(webView)
+        container?.addView(webView)
     }
 
     override fun onResume() {
         super.onResume()
-        // वापस आने पर ब्लैक स्क्रीन रोकने के लिए
+        // 🔥 BLACK SCREEN FIX: वापस आने पर WebView को रिफ्रेश करें
         Handler(Looper.getMainLooper()).postDelayed({
             webView?.onResume()
             webView?.resumeTimers()
@@ -50,8 +53,32 @@ class DisplayActivity : Activity() {
         }, 100)
     }
 
+    override fun onPause() {
+        super.onPause()
+        webView?.onPause()
+    }
+
     override fun onDestroy() {
-        (webView?.parent as? ViewGroup)?.removeView(webView)
+        // 🔥 जब मिनिमाइज़ हो, तो WebView को बैकग्राउंड (WindowManager) में भेजें
+        if (scriptName != null && webView != null && WebViewManager.activeWebViews.containsKey(scriptName)) {
+            if (Settings.canDrawOverlays(this)) {
+                try {
+                    (webView?.parent as? ViewGroup)?.removeView(webView)
+                    
+                    val wm = applicationContext.getSystemService(WINDOW_SERVICE) as WindowManager
+                    val params = WindowManager.LayoutParams(
+                        1, 1,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                        PixelFormat.TRANSLUCENT
+                    )
+                    params.x = -100
+                    params.y = -100
+                    wm.addView(webView, params)
+                } catch (e: Exception) { e.printStackTrace() }
+            }
+        }
         instance = null
         super.onDestroy()
     }
