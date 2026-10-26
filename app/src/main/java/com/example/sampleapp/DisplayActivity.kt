@@ -25,7 +25,6 @@ class DisplayActivity : Activity() {
 
         webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
         
-        // WebView को WindowManager से हटाकर स्क्रीन पर लगाएं
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
         val layout = FrameLayout(this)
