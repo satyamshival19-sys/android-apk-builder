@@ -26,19 +26,26 @@ class DisplayActivity : Activity() {
         container = FrameLayout(this)
         setContentView(container)
         
+        // स्क्रीन पर लोड करें
         WebViewManager.attachToActivity(this, webView!!, container!!)
     }
 
     override fun onResume() {
         super.onResume()
-        // अगर वापस आने पर WebView स्क्रीन पर नहीं है, तो उसे फिर से लगाएं
+        // 🔥 BLACK SCREEN FIX: अगर वापस आने पर व्यू अटैच नहीं है, तो उसे अटैच करें
         if (webView != null && webView?.parent == null && container != null) {
             WebViewManager.attachToActivity(this, webView!!, container!!)
         }
+        webView?.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        webView?.onPause()
     }
 
     override fun onDestroy() {
-        // स्क्रीन बंद होने पर वापस बैकग्राउंड में भेजें
+        // स्क्रीन बंद होने पर, वापस बैकग्राउंड में भेजें
         if (scriptName != null && webView != null && WebViewManager.activeWebViews.containsKey(scriptName)) {
             WebViewManager.attachToWindowManager(this, scriptName!!, webView!!)
         }
