@@ -12,6 +12,7 @@ import java.io.File
 
 object WebViewManager {
     val activeWebViews = HashMap<String, WebView>()
+    private val windowManagerViews = HashMap<String, WindowManager>()
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
         if (activeWebViews.containsKey(scriptName)) {
@@ -20,7 +21,6 @@ object WebViewManager {
         
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
-
         val appContext = context.applicationContext
 
         val webView = WebView(appContext).apply {
@@ -41,13 +41,16 @@ object WebViewManager {
     }
 
     fun attachToActivity(webView: WebView, container: ViewGroup) {
-        if (webView.parent != null) {
-            (webView.parent as? ViewGroup)?.removeView(webView)
+        Handler(Looper.getMainLooper()).post {
+            try {
+                if (webView.parent != null) {
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                }
+                container.addView(webView)
+            } catch (e: Exception) { e.printStackTrace() }
         }
-        container.addView(webView)
     }
 
-    // 🔥 Main Thread पर WindowManager का काम करें (क्रैश रोकने के लिए)
     fun attachToWindowManager(context: Context, scriptName: String, webView: WebView) {
         val appContext = context.applicationContext
         if (!Settings.canDrawOverlays(appContext)) return
@@ -57,6 +60,7 @@ object WebViewManager {
                 if (webView.parent != null) {
                     (webView.parent as? ViewGroup)?.removeView(webView)
                 }
+                
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 val params = WindowManager.LayoutParams(
                     0, 0, 
@@ -65,12 +69,12 @@ object WebViewManager {
                             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                     PixelFormat.TRANSLUCENT
                 )
+                
                 if (webView.parent == null) {
                     wm.addView(webView, params)
+                    windowManagerViews[scriptName] = wm
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -78,12 +82,16 @@ object WebViewManager {
         Handler(Looper.getMainLooper()).post {
             activeWebViews[scriptName]?.let {
                 it.removeJavascriptInterface("Android")
+                windowManagerViews[scriptName]?.let { wm ->
+                    try { wm.removeView(it) } catch (e: Exception) {}
+                }
                 if (it.parent != null) {
                     (it.parent as? ViewGroup)?.removeView(it)
                 }
                 it.destroy()
             }
             activeWebViews.remove(scriptName)
+            windowManagerViews.remove(scriptName)
         }
     }
 }
