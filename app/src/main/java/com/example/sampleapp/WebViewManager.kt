@@ -1,119 +1,54 @@
 package com.example.sampleapp
 
 import android.content.Context
-import android.graphics.PixelFormat
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
-import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebView
 import java.io.File
 
 object WebViewManager {
-    // एक समय पर सिर्फ 1 WebView चलेगा
-    var currentWebView: WebView? = null
-    var currentScriptName: String? = null
-    private val handler = Handler(Looper.getMainLooper())
+    // सभी चालू WebViews को नाम के साथ सेव रखेंगे
+    val activeWebViews = HashMap<String, WebView>()
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        // अगर वही स्क्रिप्ट पहले से चल रही है, तो उसे ही लौटाओ
-        if (currentScriptName == scriptName && currentWebView != null) {
-            return currentWebView!!
+        // अगर WebView पहले से चल रही है, तो वही रिटर्न करो (सेटिंग सुरक्षित रहेगी)
+        if (activeWebViews.containsKey(scriptName)) {
+            return activeWebViews[scriptName]!!
         }
         
-        // अगर कोई और स्क्रिप्ट चल रही है, तो उसे डिस्ट्रॉय करो
-        destroyCurrentWebView()
-
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
+
+        // 🔥 FIX 1: applicationContext का इस्तेमाल करें ताकि Activity बंद होने पर भी WebView जिंदा रहे
         val appContext = context.applicationContext
 
+        // नई WebView बनाओ (Exact On-Screen Condition के साथ)
         val webView = WebView(appContext).apply {
             settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
+            settings.domStorageEnabled = true // localStorage के लिए
+            settings.databaseEnabled = true // database के लिए
+            settings.mediaPlaybackRequiresUserGesture = false // साउंड बैकग्राउंड में चलेगा
             settings.allowFileAccess = true
-            settings.allowUniversalAccessFromFileURLs = true
+            settings.allowUniversalAccessFromFileURLs = true // CORS बायपास
             settings.allowFileAccessFromFileURLs = true
             
+            // इंटरनेट और API के लिए बेस URL
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
+            
             addJavascriptInterface(WebAppInterface(appContext), "Android")
+            
+            // टाइमर को रुकने से रोकें
             resumeTimers()
         }
         
-        currentWebView = webView
-        currentScriptName = scriptName
+        activeWebViews[scriptName] = webView
         return webView
     }
 
-    private fun detachFromParent(context: Context, webView: WebView) {
-        try {
-            val parent = webView.parent
-            if (parent != null) {
-                if (parent is ViewGroup) {
-                    parent.removeView(webView)
-                } else {
-                    val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                    wm.removeView(webView)
-                }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    fun attachToActivity(context: Context, webView: WebView, container: ViewGroup, scriptName: String) {
-        handler.post {
-            try {
-                detachFromParent(context, webView)
-                container.removeAllViews()
-                container.addView(webView)
-                
-                // रेंडरिंग को फिर से चालू करें
-                webView.onResume()
-                webView.resumeTimers()
-                webView.requestLayout()
-                webView.invalidate()
-                
-            } catch (e: Exception) { e.printStackTrace() }
+    // जब टॉगल OFF हो या ऐप बंद हो, तो WebView को पूरी तरह डिस्ट्रॉय करें
+    fun removeWebView(scriptName: String) {
+        activeWebViews[scriptName]?.let {
+            it.removeJavascriptInterface("Android")
+            it.destroy()
         }
-    }
-
-    fun attachToWindowManager(context: Context, scriptName: String, webView: WebView) {
-        val appContext = context.applicationContext
-        if (!Settings.canDrawOverlays(appContext)) return
-        
-        handler.post {
-            try {
-                detachFromParent(appContext, webView)
-                
-                val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन बैकग्राउंड में जिंदा रहे
-                val params = WindowManager.LayoutParams(
-                    1, 1, 
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    PixelFormat.TRANSLUCENT
-                )
-                params.x = -100
-                params.y = -100
-                
-                if (webView.parent == null) {
-                    wm.addView(webView, params)
-                }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    fun destroyCurrentWebView() {
-        handler.post {
-            currentWebView?.let {
-                it.removeJavascriptInterface("Android")
-                detachFromParent(it.context, it)
-                it.destroy()
-            }
-            currentWebView = null
-            currentScriptName = null
-        }
+        activeWebViews.remove(scriptName)
     }
 }
