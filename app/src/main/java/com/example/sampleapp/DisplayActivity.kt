@@ -25,7 +25,6 @@ class DisplayActivity : Activity() {
         val layout = FrameLayout(this)
         setContentView(layout)
         
-        // स्क्रीन पर अटैच करें
         WebViewManager.attachToActivity(webView!!, layout)
     }
 
