@@ -71,7 +71,7 @@ class MainActivity : Activity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
-            // 🔥 12 फाइलों की लिमिट
+            // 12 फाइलों की लिमिट
             if (files != null && files.size >= 12) {
                 Toast.makeText(this, "आप केवल 12 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
@@ -152,19 +152,28 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    // 🔥 STRICTLY 1 SCRIPT LIMIT: अगर कोई और स्क्रिप्ट चल रही है, तो उसे बंद करो
-                    if (WebViewManager.activeWebViews.isNotEmpty()) {
-                        val oldScript = WebViewManager.activeWebViews.keys.first()
+                    
+                    // 🔥 STRICTLY 1 SCRIPT LIMIT (FIXED): पहले पुरानी स्क्रिप्ट को तुरंत डिलीट करें
+                    val currentlyActive = WebViewManager.activeWebViews.keys.toList()
+                    for (oldScript in currentlyActive) {
                         if (oldScript != file.name) {
-                            stopBackgroundService(oldScript)
+                            // पुरानी सर्विस बंद करें
+                            val stopIntent = Intent(this, HtmlService::class.java)
+                            stopIntent.action = "STOP"
+                            stopIntent.putExtra("SCRIPT_NAME", oldScript)
+                            startService(stopIntent)
+
+                            // पुराने WebView को तुरंत मेमोरी से हटाएं
+                            WebViewManager.removeWebView(this, oldScript)
                         }
                     }
-                    
+
+                    // स्टेटस अपडेट करें
+                    activeSwitches.clear()
+                    activeSwitches.add(file.name)
                     toggle.text = "ON"
-                    if (!activeSwitches.contains(file.name)) {
-                        activeSwitches.add(file.name)
-                    }
                     
+                    // नई सर्विस शुरू करें
                     startBackgroundService(file.name)
                     
                     // टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
