@@ -6,11 +6,10 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import androidx.core.app.NotificationCompat
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
-import androidx.core.app.NotificationCompat
-import android.provider.Settings
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -19,7 +18,9 @@ class HtmlService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try { startForeground(1, buildNotification()) } catch (e: Exception) {}
+        try {
+            startForeground(1, buildNotification())
+        } catch (e: Exception) {}
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
@@ -36,26 +37,14 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
-                if (DisplayActivity.instance == null && Settings.canDrawOverlays(this)) {
-                    WebViewManager.attachToWindowManager(this, scriptName, webView)
-                }
             } else if (action == "STOP") {
-                WebViewManager.destroyCurrentWebView()
-                stopSelf()
-            }
-        } else {
-            // Immortal Recovery: OS द्वारा किल होने पर स्क्रिप्ट वापस चालू करें
-            val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-            val savedScript = prefs.getString("running_script", null)
-            
-            if (savedScript != null) {
-                val webView = WebViewManager.getOrCreateWebView(this, savedScript)
-                webView.resumeTimers()
-                if (Settings.canDrawOverlays(this)) {
-                    WebViewManager.attachToWindowManager(this, savedScript, webView)
+                WebViewManager.removeWebView(scriptName)
+                if (WebViewManager.activeWebViews.isEmpty()) {
+                    stopSelf()
                 }
             }
         }
+
         return START_STICKY
     }
 
@@ -63,15 +52,17 @@ class HtmlService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH)
+            val channel = NotificationChannel(
+                "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
+            )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("सिस्टम 24x7 एक्टिव")
-            .setContentText("आपकी स्क्रिप्ट बिना रुके चल रही है...")
+            .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
+            .setContentText("आपकी स्क्रिप्ट्स बिना रुके चल रही हैं...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -79,23 +70,24 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 🔥 Point 4, 6: जब यूजर ऐप को स्वाइप करके हटाए, तो सारी सेटिंग्स रीसेट
+        // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
+        // तो सारी स्क्रिप्ट बंद (डिस्ट्रॉय) हो जाएँ और टॉगल रीसेट हो जाएँ।
         isUserSwiped = true
-        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        
-        WebViewManager.destroyCurrentWebView()
+        for (key in WebViewManager.activeWebViews.keys.toList()) {
+            WebViewManager.removeWebView(key)
+        }
         stopSelf()
     }
 
     override fun onDestroy() {
-        // 🔥 Immortal Feature: अगर OS जबरदस्ती मारे, तो 1 सेकंड बाद रीस्टार्ट हो
+        // 🔥 FIX 3: Immortal (अमर) फीचर - अगर OS मारे, तो 1 सेकंड में रीस्टार्ट हो
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
             val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
         }
+        
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
