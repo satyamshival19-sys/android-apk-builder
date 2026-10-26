@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.WebView
-import android.widget.Toast
 
 class DisplayActivity : Activity() {
     
@@ -24,18 +23,18 @@ class DisplayActivity : Activity() {
             return
         }
 
-        // WebViewManager se pehle se chalu WebView uthao (State Preservation)
+        // WebViewManager से पहले से चालू WebView उठाओ (State Preservation)
         webView = WebViewManager.getOrCreateWebView(this, fileName)
         
-        // Agar WebView kisi aur screen par attached hai, toh use hatao
+        // अगर WebView पहले किसी और स्क्रीन पर थी, तो उसे उससे डिटैच करो
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        // Screen par set karo
+        // स्क्रीन पर सेट करो
         setContentView(webView)
     }
 
     override fun onDestroy() {
-        // Screen se hatao, par destroy mat karo (taaki background me chalta rahe)
+        // स्क्रीन से हटाओ, लेकिन डिस्ट्रॉय मत करो (ताकि बैकग्राउंड में चलती रहे)
         (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
