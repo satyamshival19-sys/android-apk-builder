@@ -38,6 +38,17 @@ class HtmlService : Service() {
                 WebViewManager.removeWebView(scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
+        } else {
+            // 🔥 Immortal Recovery: अगर OS ने ऐप को मारा था और रीस्टार्ट हुआ है
+            val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            val allKeys = prefs.all
+            for ((key, value) in allKeys) {
+                if (key.startsWith("run_") && value == true) {
+                    val savedScript = key.replace("run_", "")
+                    val webView = WebViewManager.getOrCreateWebView(this, savedScript)
+                    webView.resumeTimers()
+                }
+            }
         }
         return START_STICKY
     }
@@ -62,7 +73,10 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // पॉइंट 4, 6: जब ऐप रीसेंट्स से हटे, तो सारी स्क्रिप्ट बंद और टॉगल रीसेट
+        // 🔥 पॉइंट 4, 6: जब यूजर ऐप को स्वाइप करके हटाए, तो सारी स्क्रिप्ट बंद और टॉगल रीसेट
+        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        
         for (key in WebViewManager.activeWebViews.keys.toList()) {
             WebViewManager.removeWebView(key)
         }
@@ -70,7 +84,7 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
-        // 🔥 अमर फीचर: OS द्वारा मारे जाने पर 1 सेकंड बाद रीस्टार्ट
+        // 🔥 Immortal Feature: अगर OS जबरदस्ती मारे, तो 1 सेकंड बाद खुद को रीस्टार्ट करेगा
         val myIntent = Intent(applicationContext, HtmlService::class.java)
         val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
         val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
