@@ -28,6 +28,7 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
+        // 🔥 Overlay परमिशन चेक
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
@@ -70,6 +71,7 @@ class MainActivity : Activity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
+            // 🔥 12 फाइलों की लिमिट
             if (files != null && files.size >= 12) {
                 Toast.makeText(this, "आप केवल 12 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
@@ -150,17 +152,22 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    if (activeSwitches.size >= 4) {
-                        toggle.isChecked = false
-                        Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
-                        return@setOnCheckedChangeListener
+                    // 🔥 STRICTLY 1 SCRIPT LIMIT: अगर कोई और स्क्रिप्ट चल रही है, तो उसे बंद करो
+                    if (WebViewManager.activeWebViews.isNotEmpty()) {
+                        val oldScript = WebViewManager.activeWebViews.keys.first()
+                        if (oldScript != file.name) {
+                            stopBackgroundService(oldScript)
+                        }
                     }
+                    
                     toggle.text = "ON"
                     if (!activeSwitches.contains(file.name)) {
                         activeSwitches.add(file.name)
                     }
+                    
                     startBackgroundService(file.name)
                     
+                    // टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -203,7 +210,6 @@ class MainActivity : Activity() {
 
             if (WebViewManager.activeWebViews.containsKey(file.name)) {
                 stopBackgroundService(file.name)
-                // 🔥 FIX: यहाँ 'this' जोड़ा गया है
                 WebViewManager.removeWebView(this, file.name)
             }
 
@@ -224,7 +230,6 @@ class MainActivity : Activity() {
             .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
             .setPositiveButton("हाँ") { _, _ ->
                 stopBackgroundService(file.name)
-                // 🔥 FIX: यहाँ 'this' जोड़ा गया है
                 WebViewManager.removeWebView(this, file.name)
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
