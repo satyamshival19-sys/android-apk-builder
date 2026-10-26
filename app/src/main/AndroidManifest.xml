@@ -5,12 +5,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
+    <!-- Immortal & Background Features -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     
+    <!-- Overlay Window for Background HTML -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
@@ -19,6 +21,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SampleApp">
         
+        <!-- Main Screen -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -28,10 +31,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Screen to Show HTML -->
         <activity 
             android:name=".DisplayActivity"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
+        <!-- Immortal Background Service -->
         <service
             android:name=".HtmlService"
             android:foregroundServiceType="dataSync"
