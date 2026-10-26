@@ -35,16 +35,11 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
-                // अगर स्क्रीन नहीं खुली है, तो बैकग्राउंड में अटैच करें
-                if (DisplayActivity.instance == null) {
-                    WebViewManager.attachToWindowManager(this, scriptName, webView)
-                }
             } else if (action == "STOP") {
-                WebViewManager.removeWebView(this, scriptName)
+                WebViewManager.removeWebView(this, scriptName) // Context पास किया
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         } else {
-            // 🔥 Immortal Recovery: OS द्वारा किल होने पर सभी चालू स्क्रिप्ट्स को रीस्टार्ट करें
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val allKeys = prefs.all
             for ((key, value) in allKeys) {
@@ -79,19 +74,17 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 🔥 Point 4, 6: जब यूजर ऐप को रीसेंट्स से स्वाइप करके हटाए, तो सारी स्क्रिप्ट बंद और टॉगल रीसेट
         isUserSwiped = true
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         
         for (key in WebViewManager.activeWebViews.keys.toList()) {
-            WebViewManager.removeWebView(this, key)
+            WebViewManager.removeWebView(this, key) // Context पास किया
         }
         stopSelf()
     }
 
     override fun onDestroy() {
-        // 🔥 Immortal Feature: अगर OS जबरदस्ती मारे (स्वाइप न किया हो), तो 1 सेकंड बाद रीस्टार्ट हो
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
