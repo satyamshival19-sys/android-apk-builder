@@ -34,12 +34,15 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
+                if (DisplayActivity.instance == null) {
+                    WebViewManager.attachToWindowManager(this, scriptName, webView)
+                }
             } else if (action == "STOP") {
                 WebViewManager.removeWebView(scriptName)
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         } else {
-            // 🔥 Immortal Recovery: अगर OS ने ऐप को मारा था और रीस्टार्ट हुआ है
+            // 🔥 Immortal Recovery: OS द्वारा किल होने पर प्रीफ्स से रीस्टार्ट करें
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val allKeys = prefs.all
             for ((key, value) in allKeys) {
@@ -47,6 +50,7 @@ class HtmlService : Service() {
                     val savedScript = key.replace("run_", "")
                     val webView = WebViewManager.getOrCreateWebView(this, savedScript)
                     webView.resumeTimers()
+                    WebViewManager.attachToWindowManager(this, savedScript, webView)
                 }
             }
         }
@@ -73,7 +77,6 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 🔥 पॉइंट 4, 6: जब यूजर ऐप को स्वाइप करके हटाए, तो सारी स्क्रिप्ट बंद और टॉगल रीसेट
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         
@@ -84,7 +87,6 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
-        // 🔥 Immortal Feature: अगर OS जबरदस्ती मारे, तो 1 सेकंड बाद खुद को रीस्टार्ट करेगा
         val myIntent = Intent(applicationContext, HtmlService::class.java)
         val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
         val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
