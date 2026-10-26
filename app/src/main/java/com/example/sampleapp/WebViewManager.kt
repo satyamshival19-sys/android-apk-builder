@@ -12,11 +12,12 @@ import java.io.File
 
 object WebViewManager {
     val activeWebViews = HashMap<String, WebView>()
+    private val handler = Handler(Looper.getMainLooper())
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        // 🔥 Fix: यहाँ से isDestroyed वाला चेक हटा दिया गया है ताकि बिल्ड फेल न हो
         if (activeWebViews.containsKey(scriptName)) {
-            return activeWebViews[scriptName]!!
+            val wv = activeWebViews[scriptName]
+            if (wv != null && !wv.isDestroyed) return wv
         }
         
         val file = File(context.filesDir, "scripts/$scriptName")
@@ -55,10 +56,12 @@ object WebViewManager {
     }
 
     fun attachToActivity(context: Context, webView: WebView, container: ViewGroup) {
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             try {
                 detachFromParent(context, webView)
+                container.removeAllViews() // पुराने व्यूज साफ करें
                 container.addView(webView)
+                webView.onResume() // रेंडरिंग फिर से शुरू करें
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -67,28 +70,32 @@ object WebViewManager {
         val appContext = context.applicationContext
         if (!Settings.canDrawOverlays(appContext)) return
         
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             try {
                 detachFromParent(appContext, webView)
                 
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन एक्टिव रहे
                 val params = WindowManager.LayoutParams(
-                    0, 0, 
+                    1, 1, 
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                     PixelFormat.TRANSLUCENT
                 )
+                params.x = -100
+                params.y = -100
                 
                 if (webView.parent == null) {
                     wm.addView(webView, params)
+                    webView.onResume()
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     fun removeWebView(context: Context, scriptName: String) {
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             activeWebViews[scriptName]?.let {
                 it.removeJavascriptInterface("Android")
                 detachFromParent(context, it)
