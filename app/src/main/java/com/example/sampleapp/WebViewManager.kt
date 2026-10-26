@@ -15,7 +15,6 @@ object WebViewManager {
     private val handler = Handler(Looper.getMainLooper())
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        // 🔥 Build Fix: isDestroyed को हटा दिया गया है
         if (activeWebViews.containsKey(scriptName)) {
             return activeWebViews[scriptName]!!
         }
@@ -61,7 +60,13 @@ object WebViewManager {
                 detachFromParent(context, webView)
                 container.removeAllViews()
                 container.addView(webView)
+                
+                // 🔥 BLACK SCREEN FIX: रेंडरिंग को फिर से चालू करने के लिए
                 webView.onResume()
+                webView.resumeTimers()
+                webView.requestLayout()
+                webView.invalidate()
+                
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
