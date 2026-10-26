@@ -42,7 +42,7 @@ class HtmlService : Service() {
                 if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         } else {
-            // Immortal Recovery
+            // Immortal Recovery: OS द्वारा किल होने पर स्क्रिप्ट वापस चालू करें
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val allKeys = prefs.all
             for ((key, value) in allKeys) {
