@@ -2,6 +2,8 @@ package com.example.sampleapp
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -19,7 +21,6 @@ object WebViewManager {
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // 🔥 Context Fix: applicationContext का इस्तेमाल करें ताकि Activity डिस्ट्रॉय होने पर भी WebView जिंदा रहे
         val appContext = context.applicationContext
 
         val webView = WebView(appContext).apply {
@@ -39,7 +40,6 @@ object WebViewManager {
         return webView
     }
 
-    // स्क्रीन पर दिखाने के लिए (Attach to Activity)
     fun attachToActivity(webView: WebView, container: ViewGroup) {
         if (webView.parent != null) {
             (webView.parent as? ViewGroup)?.removeView(webView)
@@ -47,43 +47,43 @@ object WebViewManager {
         container.addView(webView)
     }
 
-    // बैकग्राउंड में भेजने के लिए (Attach to Invisible Window)
+    // 🔥 Main Thread पर WindowManager का काम करें (क्रैश रोकने के लिए)
     fun attachToWindowManager(context: Context, scriptName: String, webView: WebView) {
         val appContext = context.applicationContext
         if (!Settings.canDrawOverlays(appContext)) return
         
-        if (webView.parent != null) {
-            (webView.parent as? ViewGroup)?.removeView(webView)
-        }
-
-        val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val params = WindowManager.LayoutParams(
-            0, 0, 
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        )
-        try {
-            wm.addView(webView, params)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        Handler(Looper.getMainLooper()).post {
+            try {
+                if (webView.parent != null) {
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                }
+                val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val params = WindowManager.LayoutParams(
+                    0, 0, 
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT
+                )
+                if (webView.parent == null) {
+                    wm.addView(webView, params)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     fun removeWebView(scriptName: String) {
-        activeWebViews[scriptName]?.let {
-            it.removeJavascriptInterface("Android")
-            if (it.parent != null) {
-                (it.parent as? ViewGroup)?.removeView(it)
-            } else {
-                 try {
-                     val wm = it.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                     wm.removeView(it)
-                 } catch (e: Exception) {}
+        Handler(Looper.getMainLooper()).post {
+            activeWebViews[scriptName]?.let {
+                it.removeJavascriptInterface("Android")
+                if (it.parent != null) {
+                    (it.parent as? ViewGroup)?.removeView(it)
+                }
+                it.destroy()
             }
-            it.destroy()
+            activeWebViews.remove(scriptName)
         }
-        activeWebViews.remove(scriptName)
     }
 }
