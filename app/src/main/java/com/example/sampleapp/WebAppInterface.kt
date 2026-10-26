@@ -28,7 +28,7 @@ class WebAppInterface(private val context: Context) {
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("🚨 ALERT! 🚨")
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Fixed typo
+            .setPriority(NotificationCompat.PRIORITY_HIGH) 
             .setAutoCancel(false)
             .setOngoing(true)
             .build()
