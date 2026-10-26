@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 
 class DisplayActivity : Activity() {
@@ -29,12 +30,18 @@ class DisplayActivity : Activity() {
         
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
+        // 🔥 सबसे जरुरी फिक्स: WebView को Activity का Window दें ताकि ड्रॉपडाउन खुले
+        webView?.webChromeClient = WebChromeClient()
+        webView?.isFocusable = true
+        webView?.isFocusableInTouchMode = true
+        webView?.requestFocus()
+        
         setContentView(webView)
     }
 
     override fun onResume() {
         super.onResume()
-        // 🔥 BLACK SCREEN FIX: वापस आने पर WebView को रिफ्रेश करें
+        // वापस आने पर ब्लैक स्क्रीन रोकने के लिए
         Handler(Looper.getMainLooper()).postDelayed({
             webView?.onResume()
             webView?.resumeTimers()
