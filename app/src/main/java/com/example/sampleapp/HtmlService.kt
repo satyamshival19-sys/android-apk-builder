@@ -36,23 +36,23 @@ class HtmlService : Service() {
             if (action == "START") {
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
                 webView.resumeTimers() 
-                // सर्विस खुद से अटैच नहीं करेगी, DisplayActivity करेगी
+                if (DisplayActivity.instance == null && Settings.canDrawOverlays(this)) {
+                    WebViewManager.attachToWindowManager(this, scriptName, webView)
+                }
             } else if (action == "STOP") {
-                WebViewManager.removeWebView(this, scriptName)
-                if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
+                WebViewManager.destroyCurrentWebView()
+                stopSelf()
             }
         } else {
             // Immortal Recovery: OS द्वारा किल होने पर स्क्रिप्ट वापस चालू करें
             val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-            val allKeys = prefs.all
-            for ((key, value) in allKeys) {
-                if (key.startsWith("run_") && value == true) {
-                    val savedScript = key.replace("run_", "")
-                    val webView = WebViewManager.getOrCreateWebView(this, savedScript)
-                    webView.resumeTimers()
-                    if (Settings.canDrawOverlays(this)) {
-                        WebViewManager.attachToWindowManager(this, savedScript, webView)
-                    }
+            val savedScript = prefs.getString("running_script", null)
+            
+            if (savedScript != null) {
+                val webView = WebViewManager.getOrCreateWebView(this, savedScript)
+                webView.resumeTimers()
+                if (Settings.canDrawOverlays(this)) {
+                    WebViewManager.attachToWindowManager(this, savedScript, webView)
                 }
             }
         }
@@ -71,7 +71,7 @@ class HtmlService : Service() {
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
             .setContentTitle("सिस्टम 24x7 एक्टिव")
-            .setContentText("आपकी स्क्रिप्ट्स बिना रुके चल रही हैं...")
+            .setContentText("आपकी स्क्रिप्ट बिना रुके चल रही है...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -79,17 +79,17 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // 🔥 Point 4, 6: जब यूजर ऐप को स्वाइप करके हटाए, तो सारी सेटिंग्स रीसेट
         isUserSwiped = true
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         
-        for (key in WebViewManager.activeWebViews.keys.toList()) {
-            WebViewManager.removeWebView(this, key)
-        }
+        WebViewManager.destroyCurrentWebView()
         stopSelf()
     }
 
     override fun onDestroy() {
+        // 🔥 Immortal Feature: अगर OS जबरदस्ती मारे, तो 1 सेकंड बाद रीस्टार्ट हो
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
