@@ -31,14 +31,10 @@ class HtmlService : Service() {
 
         if (scriptName != null) {
             if (action == "START") {
-                // WebViewManager se WebView banao ya uthao
                 val webView = WebViewManager.getOrCreateWebView(this, scriptName)
-                webView.resumeTimers() // Timers ko zinda rakho
+                webView.resumeTimers() 
             } else if (action == "STOP") {
-                // Sirf is specific WebView ko destroy karo
                 WebViewManager.removeWebView(scriptName)
-                
-                // Agar koi aur WebView active nahi hai, toh service band kar do
                 if (WebViewManager.activeWebViews.isEmpty()) {
                     stopSelf()
                 }
@@ -62,17 +58,23 @@ class HtmlService : Service() {
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
             .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
-            .setContentText("आपकी स्क्रिप्ट्स चल रही हैं...")
+            .setContentText("आपकी स्क्रिप्ट्स बिना रुके चल रही हैं...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
     }
 
-    override fun onDestroy() {
-        // Service band hone par saari WebViews destroy karo
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
+        // तो सारी स्क्रिप्ट बंद (डिस्ट्रॉय) हो जाएँ और टॉगल रीसेट हो जाएँ।
         for (key in WebViewManager.activeWebViews.keys.toList()) {
             WebViewManager.removeWebView(key)
         }
+        stopSelf()
+    }
+
+    override fun onDestroy() {
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
