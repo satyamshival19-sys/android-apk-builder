@@ -32,7 +32,6 @@ object WebViewManager {
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
             
-            // 🔥 BLACK SCREEN FIX: Software Rendering का इस्तेमाल करें
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
@@ -58,18 +57,28 @@ object WebViewManager {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    fun attachToActivity(context: Context, webView: WebView, container: ViewGroup) {
+    fun attachToActivity(context: Context, webView: WebView, container: ViewGroup, scriptName: String) {
         handler.post {
             try {
+                // 🔥 CHECK: क्या यह WebView बैकग्राउंड (WindowManager) से आ रहा है?
+                val isComingFromBackground = webView.parent !is ViewGroup && webView.parent != null
+
                 detachFromParent(context, webView)
                 container.removeAllViews()
                 container.addView(webView)
                 
-                // रेंडरिंग फिर से चालू करें
                 webView.onResume()
                 webView.resumeTimers()
                 webView.requestLayout()
                 webView.invalidate()
+                
+                // 🔥 BLACK SCREEN FIX: अगर बैकग्राउंड से आ रहा है, तो इसे फ्रेश लोड करें
+                if (isComingFromBackground) {
+                    val file = File(context.filesDir, "scripts/$scriptName")
+                    if (file.exists()) {
+                        webView.loadDataWithBaseURL("https://www.binance.com", file.readText(), "text/html", "UTF-8", null)
+                    }
+                }
                 
             } catch (e: Exception) { e.printStackTrace() }
         }
