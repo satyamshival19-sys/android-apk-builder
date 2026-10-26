@@ -2,54 +2,40 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.widget.FrameLayout
+import android.view.ViewGroup
 import android.webkit.WebView
 
 class DisplayActivity : Activity() {
-    companion object { var instance: DisplayActivity? = null }
+    
+    companion object {
+        var instance: DisplayActivity? = null
+    }
+
     private var webView: WebView? = null
-    private var scriptName: String? = null
-    private var container: FrameLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
-        scriptName = intent.getStringExtra("SCRIPT_NAME")
-        
-        if (scriptName == null) {
+
+        val fileName = intent.getStringExtra("SCRIPT_NAME")
+        if (fileName == null) {
             finish()
             return
         }
 
-        webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
+        // WebViewManager से पहले से चालू WebView उठाओ (State Preservation)
+        webView = WebViewManager.getOrCreateWebView(this, fileName)
         
-        container = FrameLayout(this)
-        setContentView(container)
+        // अगर WebView पहले किसी और स्क्रीन पर थी, तो उसे उससे डिटैच करो
+        (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        // UI थ्रेड को सेटल होने का समय दें
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (webView != null && container != null) {
-                WebViewManager.attachToActivity(this, webView!!, container!!, scriptName!!)
-            }
-        }, 100)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (webView != null && container != null && webView?.parent == null) {
-            Handler(Looper.getMainLooper()).postDelayed({
-                WebViewManager.attachToActivity(this, webView!!, container!!, scriptName!!)
-            }, 100)
-        }
+        // स्क्रीन पर सेट करो
+        setContentView(webView)
     }
 
     override fun onDestroy() {
-        // मिनिमाइज़ होने पर बैकग्राउंड (WindowManager) में भेजें
-        if (scriptName != null && webView != null && WebViewManager.currentScriptName == scriptName) {
-            WebViewManager.attachToWindowManager(this, scriptName!!, webView!!)
-        }
+        // स्क्रीन से हटाओ, लेकिन डिस्ट्रॉय मत करो (ताकि बैकग्राउंड में चलती रहे)
+        (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
     }
