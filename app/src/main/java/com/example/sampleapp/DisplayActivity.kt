@@ -20,7 +20,6 @@ class DisplayActivity : Activity() {
             return
         }
 
-        // WebView प्राप्त करें
         webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
         
         val layout = FrameLayout(this)
@@ -31,7 +30,6 @@ class DisplayActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // स्क्रीन बंद होने पर, वापस बैकग्राउंड में भेजें (अगर यह अभी भी चालू है)
         if (scriptName != null && webView != null && WebViewManager.activeWebViews.containsKey(scriptName)) {
             WebViewManager.attachToWindowManager(this, scriptName!!, webView!!)
         }
