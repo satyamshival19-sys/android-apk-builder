@@ -5,21 +5,26 @@ import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebView
 import java.io.File
 
 object WebViewManager {
-    val activeWebViews = HashMap<String, WebView>()
+    // एक समय पर सिर्फ 1 WebView चलेगा
+    var currentWebView: WebView? = null
+    var currentScriptName: String? = null
     private val handler = Handler(Looper.getMainLooper())
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        if (activeWebViews.containsKey(scriptName)) {
-            return activeWebViews[scriptName]!!
+        // अगर वही स्क्रिप्ट पहले से चल रही है, तो उसे ही लौटाओ
+        if (currentScriptName == scriptName && currentWebView != null) {
+            return currentWebView!!
         }
         
+        // अगर कोई और स्क्रिप्ट चल रही है, तो उसे डिस्ट्रॉय करो
+        destroyCurrentWebView()
+
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
         val appContext = context.applicationContext
@@ -32,14 +37,13 @@ object WebViewManager {
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
             
-            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            
             loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
             addJavascriptInterface(WebAppInterface(appContext), "Android")
             resumeTimers()
         }
         
-        activeWebViews[scriptName] = webView
+        currentWebView = webView
+        currentScriptName = scriptName
         return webView
     }
 
@@ -60,25 +64,15 @@ object WebViewManager {
     fun attachToActivity(context: Context, webView: WebView, container: ViewGroup, scriptName: String) {
         handler.post {
             try {
-                // 🔥 CHECK: क्या यह WebView बैकग्राउंड (WindowManager) से आ रहा है?
-                val isComingFromBackground = webView.parent !is ViewGroup && webView.parent != null
-
                 detachFromParent(context, webView)
                 container.removeAllViews()
                 container.addView(webView)
                 
+                // रेंडरिंग को फिर से चालू करें
                 webView.onResume()
                 webView.resumeTimers()
                 webView.requestLayout()
                 webView.invalidate()
-                
-                // 🔥 BLACK SCREEN FIX: अगर बैकग्राउंड से आ रहा है, तो इसे फ्रेश लोड करें
-                if (isComingFromBackground) {
-                    val file = File(context.filesDir, "scripts/$scriptName")
-                    if (file.exists()) {
-                        webView.loadDataWithBaseURL("https://www.binance.com", file.readText(), "text/html", "UTF-8", null)
-                    }
-                }
                 
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -93,6 +87,7 @@ object WebViewManager {
                 detachFromParent(appContext, webView)
                 
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन बैकग्राउंड में जिंदा रहे
                 val params = WindowManager.LayoutParams(
                     1, 1, 
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -110,14 +105,15 @@ object WebViewManager {
         }
     }
 
-    fun removeWebView(context: Context, scriptName: String) {
+    fun destroyCurrentWebView() {
         handler.post {
-            activeWebViews[scriptName]?.let {
+            currentWebView?.let {
                 it.removeJavascriptInterface("Android")
-                detachFromParent(context, it)
+                detachFromParent(it.context, it)
                 it.destroy()
             }
-            activeWebViews.remove(scriptName)
+            currentWebView = null
+            currentScriptName = null
         }
     }
 }
