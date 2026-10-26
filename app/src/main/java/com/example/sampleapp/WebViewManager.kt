@@ -15,9 +15,10 @@ object WebViewManager {
     private val handler = Handler(Looper.getMainLooper())
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
+        // 🔥 FIX: यहाँ से isDestroyed वाली लाइन हटा दी गई है। 
+        // अगर यह मैप में है, तो इसका मतलब यह जिंदा है।
         if (activeWebViews.containsKey(scriptName)) {
-            val wv = activeWebViews[scriptName]
-            if (wv != null && !wv.isDestroyed) return wv
+            return activeWebViews[scriptName]!!
         }
         
         val file = File(context.filesDir, "scripts/$scriptName")
@@ -59,7 +60,7 @@ object WebViewManager {
         handler.post {
             try {
                 detachFromParent(context, webView)
-                container.removeAllViews() // पुराने व्यूज साफ करें
+                container.removeAllViews() // पुराने व्यूज साफ करें ताकि ब्लैक स्क्रीन न आए
                 container.addView(webView)
                 webView.onResume() // रेंडरिंग फिर से शुरू करें
             } catch (e: Exception) { e.printStackTrace() }
@@ -75,7 +76,7 @@ object WebViewManager {
                 detachFromParent(appContext, webView)
                 
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन एक्टिव रहे
+                // 1x1 साइज़ का इस्तेमाल करें ताकि रेंडरिंग इंजन बैकग्राउंड में एक्टिव रहे
                 val params = WindowManager.LayoutParams(
                     1, 1, 
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
