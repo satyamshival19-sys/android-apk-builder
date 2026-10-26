@@ -6,6 +6,9 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 
 class HtmlService : Service() {
@@ -14,9 +17,7 @@ class HtmlService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try {
-            startForeground(1, buildNotification())
-        } catch (e: Exception) {}
+        try { startForeground(1, buildNotification()) } catch (e: Exception) {}
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
@@ -35,12 +36,9 @@ class HtmlService : Service() {
                 webView.resumeTimers() 
             } else if (action == "STOP") {
                 WebViewManager.removeWebView(scriptName)
-                if (WebViewManager.activeWebViews.isEmpty()) {
-                    stopSelf()
-                }
+                if (WebViewManager.activeWebViews.isEmpty()) stopSelf()
             }
         }
-
         return START_STICKY
     }
 
@@ -48,16 +46,14 @@ class HtmlService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
-            )
+            val channel = NotificationChannel("html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
+            .setContentTitle("सिस्टम 24x7 एक्टिव")
             .setContentText("आपकी स्क्रिप्ट्स बिना रुके चल रही हैं...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
@@ -66,8 +62,7 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
-        // तो सारी स्क्रिप्ट बंद (डिस्ट्रॉय) हो जाएँ और टॉगल रीसेट हो जाएँ।
+        // पॉइंट 4, 6: जब ऐप रीसेंट्स से हटे, तो सारी स्क्रिप्ट बंद और टॉगल रीसेट
         for (key in WebViewManager.activeWebViews.keys.toList()) {
             WebViewManager.removeWebView(key)
         }
@@ -75,6 +70,12 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
+        // 🔥 अमर फीचर: OS द्वारा मारे जाने पर 1 सेकंड बाद रीस्टार्ट
+        val myIntent = Intent(applicationContext, HtmlService::class.java)
+        val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+        val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
