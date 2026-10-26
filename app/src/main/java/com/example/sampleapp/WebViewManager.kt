@@ -11,12 +11,13 @@ import android.webkit.WebView
 import java.io.File
 
 object WebViewManager {
+    // 4 स्क्रिप्ट्स को मेमोरी में रखने के लिए HashMap
     val activeWebViews = HashMap<String, WebView>()
-    private val windowManagerViews = HashMap<String, WindowManager>()
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
         if (activeWebViews.containsKey(scriptName)) {
-            return activeWebViews[scriptName]!!
+            val wv = activeWebViews[scriptName]!!
+            if (!wv.isDestroyed) return wv
         }
         
         val file = File(context.filesDir, "scripts/$scriptName")
@@ -26,7 +27,7 @@ object WebViewManager {
         val webView = WebView(appContext).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mediaPlaybackRequiresUserGesture = false // बैकग्राउंड साउंड के लिए
             settings.allowFileAccess = true
             settings.allowUniversalAccessFromFileURLs = true
             settings.allowFileAccessFromFileURLs = true
@@ -40,12 +41,24 @@ object WebViewManager {
         return webView
     }
 
-    fun attachToActivity(webView: WebView, container: ViewGroup) {
+    // 🔥 क्रैश रोकने का सबसे बड़ा लॉजिक: View को पुराने पैरेंट से हटाना
+    private fun detachFromParent(context: Context, webView: WebView) {
+        try {
+            if (webView.parent != null) {
+                if (webView.parent is ViewGroup) {
+                    (webView.parent as ViewGroup).removeView(webView)
+                } else {
+                    val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    wm.removeView(webView)
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    fun attachToActivity(context: Context, webView: WebView, container: ViewGroup) {
         Handler(Looper.getMainLooper()).post {
             try {
-                if (webView.parent != null) {
-                    (webView.parent as? ViewGroup)?.removeView(webView)
-                }
+                detachFromParent(context, webView)
                 container.addView(webView)
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -57,9 +70,7 @@ object WebViewManager {
         
         Handler(Looper.getMainLooper()).post {
             try {
-                if (webView.parent != null) {
-                    (webView.parent as? ViewGroup)?.removeView(webView)
-                }
+                detachFromParent(appContext, webView)
                 
                 val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 val params = WindowManager.LayoutParams(
@@ -70,28 +81,19 @@ object WebViewManager {
                     PixelFormat.TRANSLUCENT
                 )
                 
-                if (webView.parent == null) {
-                    wm.addView(webView, params)
-                    windowManagerViews[scriptName] = wm
-                }
+                wm.addView(webView, params)
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    fun removeWebView(scriptName: String) {
+    fun removeWebView(context: Context, scriptName: String) {
         Handler(Looper.getMainLooper()).post {
             activeWebViews[scriptName]?.let {
                 it.removeJavascriptInterface("Android")
-                windowManagerViews[scriptName]?.let { wm ->
-                    try { wm.removeView(it) } catch (e: Exception) {}
-                }
-                if (it.parent != null) {
-                    (it.parent as? ViewGroup)?.removeView(it)
-                }
+                detachFromParent(context, it)
                 it.destroy()
             }
             activeWebViews.remove(scriptName)
-            windowManagerViews.remove(scriptName)
         }
     }
 }
