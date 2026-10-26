@@ -2,9 +2,9 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import java.io.File
+import android.widget.Toast
 
 class DisplayActivity : Activity() {
     
@@ -12,33 +12,31 @@ class DisplayActivity : Activity() {
         var instance: DisplayActivity? = null
     }
 
+    private var webView: WebView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_display)
-        
         instance = this
 
-        val fileName = intent.getStringExtra("SCRIPT_NAME") ?: return
-        val file = File(filesDir, "scripts/$fileName")
-        val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
+        val fileName = intent.getStringExtra("SCRIPT_NAME")
+        if (fileName == null) {
+            finish()
+            return
+        }
 
-        val webView = findViewById<WebView>(R.id.webView)
+        // WebViewManager se pehle se chalu WebView uthao (State Preservation)
+        webView = WebViewManager.getOrCreateWebView(this, fileName)
         
-        // 👇 HTML को ऑन-स्क्रीन वेब ब्राउज़र जैसी आज़ादी 👇
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.mediaPlaybackRequiresUserGesture = false 
-        webView.settings.allowFileAccess = true
-        webView.settings.loadsImagesAutomatically = true
-        webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW // HTTP/HTTPS के लिए
+        // Agar WebView kisi aur screen par attached hai, toh use hatao
+        (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        webView.webViewClient = WebViewClient()
-        
-        // Base URL (Binance) देने से इंटरनेट और API ब्लॉक नहीं होंगे
-        webView.loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
+        // Screen par set karo
+        setContentView(webView)
     }
 
     override fun onDestroy() {
+        // Screen se hatao, par destroy mat karo (taaki background me chalta rahe)
+        (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
     }
