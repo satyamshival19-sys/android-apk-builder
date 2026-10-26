@@ -31,16 +31,10 @@ class DisplayActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // 🔥 BLACK SCREEN FIX: जब वापस आएं, तो व्यू को फिर से अटैच करें
-        if (webView != null && webView?.parent == null && container != null) {
+        // 🔥 ब्लैक स्क्रीन फिक्स: जब वापस आएं, तो व्यू को फिर से अटैच करें
+        if (webView != null && container != null) {
             WebViewManager.attachToActivity(this, webView!!, container!!)
         }
-        webView?.onResume()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        webView?.onPause()
     }
 
     override fun onDestroy() {
