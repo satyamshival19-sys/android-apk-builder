@@ -28,27 +28,26 @@ class DisplayActivity : Activity() {
         container = FrameLayout(this)
         setContentView(container)
         
-        // 🔥 UI थ्रेड को सेटल होने का समय दें ताकि स्क्रीन काली न हो
+        // UI थ्रेड को सेटल होने का समय दें
         Handler(Looper.getMainLooper()).postDelayed({
             if (webView != null && container != null) {
-                WebViewManager.attachToActivity(this, webView!!, container!!)
+                WebViewManager.attachToActivity(this, webView!!, container!!, scriptName!!)
             }
-        }, 150)
+        }, 100)
     }
 
     override fun onResume() {
         super.onResume()
-        // जब वापस आएं, तो व्यू को फिर से अटैच करें
         if (webView != null && container != null && webView?.parent == null) {
             Handler(Looper.getMainLooper()).postDelayed({
-                WebViewManager.attachToActivity(this, webView!!, container!!)
-            }, 150)
+                WebViewManager.attachToActivity(this, webView!!, container!!, scriptName!!)
+            }, 100)
         }
     }
 
     override fun onDestroy() {
-        // जब मिनिमाइज़ हो, तो बैकग्राउंड में भेजें
-        if (scriptName != null && webView != null && WebViewManager.activeWebViews.containsKey(scriptName)) {
+        // मिनिमाइज़ होने पर बैकग्राउंड (WindowManager) में भेजें
+        if (scriptName != null && webView != null && WebViewManager.currentScriptName == scriptName) {
             WebViewManager.attachToWindowManager(this, scriptName!!, webView!!)
         }
         instance = null
