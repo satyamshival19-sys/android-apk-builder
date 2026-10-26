@@ -12,15 +12,11 @@ import java.io.File
 
 object WebViewManager {
     val activeWebViews = HashMap<String, WebView>()
-    private val windowManagerViews = HashMap<String, WindowManager>()
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        // 🔥 अगर पहले से चल रही है और डिस्ट्रॉय नहीं हुई है, तो वही दो
+        // 🔥 Fix: यहाँ से isDestroyed वाला चेक हटा दिया गया है ताकि बिल्ड फेल न हो
         if (activeWebViews.containsKey(scriptName)) {
-            val wv = activeWebViews[scriptName]!!
-            if (!wv.isDestroyed) {
-                return wv
-            }
+            return activeWebViews[scriptName]!!
         }
         
         val file = File(context.filesDir, "scripts/$scriptName")
@@ -44,21 +40,18 @@ object WebViewManager {
         return webView
     }
 
-    // 🔥 नया फंक्शन: WebView को उसके पुराने पैरेंट से सुरक्षित हटाना
     private fun detachFromParent(context: Context, webView: WebView) {
         try {
-            if (webView.parent != null) {
-                if (webView.parent is ViewGroup) {
-                    (webView.parent as ViewGroup).removeView(webView)
+            val parent = webView.parent
+            if (parent != null) {
+                if (parent is ViewGroup) {
+                    parent.removeView(webView)
                 } else {
-                    // अगर विंडो (WindowManager) में है
                     val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                     wm.removeView(webView)
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     fun attachToActivity(context: Context, webView: WebView, container: ViewGroup) {
@@ -87,8 +80,9 @@ object WebViewManager {
                     PixelFormat.TRANSLUCENT
                 )
                 
-                wm.addView(webView, params)
-                windowManagerViews[scriptName] = wm
+                if (webView.parent == null) {
+                    wm.addView(webView, params)
+                }
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -101,7 +95,6 @@ object WebViewManager {
                 it.destroy()
             }
             activeWebViews.remove(scriptName)
-            windowManagerViews.remove(scriptName)
         }
     }
 }
