@@ -2,6 +2,7 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -28,7 +29,7 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // 🔥 Overlay परमिशन चेक
+        // Overlay परमिशन चेक
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
@@ -71,7 +72,7 @@ class MainActivity : Activity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
-            // 12 फाइलों की लिमिट
+            // 🔥 12 फाइलों की लिमिट
             if (files != null && files.size >= 12) {
                 Toast.makeText(this, "आप केवल 12 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
@@ -105,7 +106,14 @@ class MainActivity : Activity() {
         val files = scriptsDir.listFiles { file -> file.extension == "html" }
         
         activeSwitches.clear()
-        activeSwitches.addAll(WebViewManager.activeWebViews.keys)
+        // जो टॉगल पहले से ऑन हैं, उन्हें ट्रैक करें
+        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        val allKeys = prefs.all
+        for ((key, value) in allKeys) {
+            if (key.startsWith("run_") && value == true) {
+                activeSwitches.add(key.replace("run_", ""))
+            }
+        }
 
         if (files == null || files.isEmpty()) {
             val tv = TextView(this)
@@ -146,37 +154,31 @@ class MainActivity : Activity() {
             }
 
             val toggle = Switch(this)
-            val isRunning = WebViewManager.activeWebViews.containsKey(file.name)
+            val isRunning = activeSwitches.contains(file.name)
             toggle.isChecked = isRunning
             toggle.text = if (isRunning) "ON" else "OFF"
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    
-                    // 🔥 STRICTLY 1 SCRIPT LIMIT (FIXED): पहले पुरानी स्क्रिप्ट को तुरंत डिलीट करें
-                    val currentlyActive = WebViewManager.activeWebViews.keys.toList()
-                    for (oldScript in currentlyActive) {
-                        if (oldScript != file.name) {
-                            // पुरानी सर्विस बंद करें
-                            val stopIntent = Intent(this, HtmlService::class.java)
-                            stopIntent.action = "STOP"
-                            stopIntent.putExtra("SCRIPT_NAME", oldScript)
-                            startService(stopIntent)
-
-                            // पुराने WebView को तुरंत मेमोरी से हटाएं
-                            WebViewManager.removeWebView(this, oldScript)
-                        }
+                    // 🔥 4 स्क्रिप्ट की लिमिट
+                    if (activeSwitches.size >= 4) {
+                        toggle.isChecked = false
+                        Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
+                        return@setOnCheckedChangeListener
                     }
-
-                    // स्टेटस अपडेट करें
-                    activeSwitches.clear()
-                    activeSwitches.add(file.name)
+                    
                     toggle.text = "ON"
+                    if (!activeSwitches.contains(file.name)) {
+                        activeSwitches.add(file.name)
+                    }
                     
-                    // नई सर्विस शुरू करें
-                    startBackgroundService(file.name)
+                    // सेव करें कि यह स्क्रिप्ट चल रही है
+                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", true).apply()
                     
-                    // टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
+                    // सर्विस शुरू करें
+                    startService(Intent(this, HtmlService::class.java))
+                    
+                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -184,7 +186,14 @@ class MainActivity : Activity() {
                 } else {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
-                    stopBackgroundService(file.name)
+                    
+                    // सेव करें कि यह स्क्रिप्ट बंद हो गई है
+                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
+                    
+                    // अगर कोई और स्क्रिप्ट नहीं चल रही, तो सर्विस बंद करें
+                    if (activeSwitches.isEmpty()) {
+                        stopService(Intent(this, HtmlService::class.java))
+                    }
                 }
             }
 
@@ -198,7 +207,6 @@ class MainActivity : Activity() {
     private fun showRenameDialog(file: File) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("स्क्रिप्ट का नाम बदलें")
-
         val input = EditText(this)
         input.setText(file.name)
         input.setSelection(file.name.lastIndexOf("."))
@@ -217,11 +225,6 @@ class MainActivity : Activity() {
                 return@setPositiveButton
             }
 
-            if (WebViewManager.activeWebViews.containsKey(file.name)) {
-                stopBackgroundService(file.name)
-                WebViewManager.removeWebView(this, file.name)
-            }
-
             if (file.renameTo(newFile)) {
                 Toast.makeText(this, "नाम बदल गया!", Toast.LENGTH_SHORT).show()
                 refreshList()
@@ -238,8 +241,9 @@ class MainActivity : Activity() {
             .setTitle("डिलीट करें?")
             .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
             .setPositiveButton("हाँ") { _, _ ->
-                stopBackgroundService(file.name)
-                WebViewManager.removeWebView(this, file.name)
+                activeSwitches.remove(file.name)
+                getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
+                
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
                     refreshList()
@@ -247,23 +251,5 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("नहीं", null)
             .show()
-    }
-
-    private fun startBackgroundService(fileName: String) {
-        val intent = Intent(this, HtmlService::class.java)
-        intent.action = "START"
-        intent.putExtra("SCRIPT_NAME", fileName)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun stopBackgroundService(fileName: String) {
-        val intent = Intent(this, HtmlService::class.java)
-        intent.action = "STOP"
-        intent.putExtra("SCRIPT_NAME", fileName)
-        startService(intent)
     }
 }
