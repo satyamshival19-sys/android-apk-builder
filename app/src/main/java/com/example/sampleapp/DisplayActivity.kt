@@ -26,12 +26,11 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        // 🔥 FIX 3: onPause() ko yahan call NAHI kiya. Taaki background mein JS (data/alert) chalta rahe.
+        // 🔥 FIX: onPause nahi lagaya taaki background mein alert/JS chalta rahe
     }
 
     override fun onResume() {
         super.onResume()
-        // Black Screen Fix
         Handler(Looper.getMainLooper()).postDelayed({
             webView?.onResume()
             webView?.resumeTimers()
@@ -41,7 +40,6 @@ class DisplayActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // WebView ko destroy nahi kar rahe, bas screen se hata rahe hain
         (webView?.parent as? ViewGroup)?.removeView(webView)
         super.onDestroy()
     }
