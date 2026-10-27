@@ -9,32 +9,16 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 
 class DisplayActivity : Activity() {
-    
-    companion object {
-        var instance: DisplayActivity? = null
-    }
-
     private var webView: WebView? = null
     private var container: FrameLayout? = null
-    private var scriptName: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        instance = this
-        scriptName = intent.getStringExtra("SCRIPT_NAME")
-        
-        if (scriptName == null) {
-            finish()
-            return
-        }
+        val scriptName = intent.getStringExtra("SCRIPT_NAME") ?: return finish()
 
-        // मेमोरी से इस स्क्रिप्ट का WebView उठाओ
-        webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
-        
-        // अगर WebView पहले किसी स्क्रीन पर थी, तो उसे डिटैच करो
+        webView = WebViewManager.getOrCreateWebView(this, scriptName)
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        // नया कंटेनर बनाकर उसमें डालो
         container = FrameLayout(this)
         container?.addView(webView)
         setContentView(container)
@@ -42,12 +26,12 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        webView?.onPause()
+        // 🔥 FIX 3: onPause() ko yahan call NAHI kiya. Taaki background mein JS (data/alert) chalta rahe.
     }
 
     override fun onResume() {
         super.onResume()
-        // 🔥 BLACK SCREEN FIX: वापस आने पर व्यू को रिफ्रेश करें
+        // Black Screen Fix
         Handler(Looper.getMainLooper()).postDelayed({
             webView?.onResume()
             webView?.resumeTimers()
@@ -57,9 +41,8 @@ class DisplayActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // 🔥 FIX: यहाँ WebView डिस्ट्रॉय नहीं होगा, वह मेमोरी में सेव रहेगा
+        // WebView ko destroy nahi kar rahe, bas screen se hata rahe hain
         (webView?.parent as? ViewGroup)?.removeView(webView)
-        instance = null
         super.onDestroy()
     }
 }
