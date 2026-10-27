@@ -1,73 +1,56 @@
 package com.example.sampleapp
 
 import android.content.Context
-import android.graphics.PixelFormat
-import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.io.File
 
 object WebViewManager {
-    val activeWebViews = HashMap<String, WebView>()
+    // WebView को मेमोरी में सेव रखेंगे ताकि सेटिंग रीसेट न हो
+    var myWebView: WebView? = null
+    var currentScriptName: String? = null
 
     fun getOrCreateWebView(context: Context, scriptName: String): WebView {
-        if (activeWebViews.containsKey(scriptName)) {
-            return activeWebViews[scriptName]!!
+        // अगर वही स्क्रिप्ट पहले से चल रही है, तो उसी WebView को लौटाओ
+        if (myWebView != null && currentScriptName == scriptName) {
+            return myWebView!!
         }
-        
+
+        // अगर नई स्क्रिप्ट है, तो पुराना डिस्ट्रॉय करो
+        destroyWebView()
+
         val file = File(context.filesDir, "scripts/$scriptName")
+        // 🔥 FIX: स्पेशल कैरेक्टर वाली फाइल भी यहाँ से सही पढ़ी जाएगी
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // 🔥 यहाँ सीधे context (Activity) का इस्तेमाल किया गया है ताकि ड्रॉपडाउन चले
-        val webView = WebView(context).apply {
+        myWebView = WebView(context).apply {
             settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true 
-            settings.databaseEnabled = true 
-            settings.mediaPlaybackRequiresUserGesture = false 
-            settings.allowFileAccess = true
-            settings.allowUniversalAccessFromFileURLs = true 
-            settings.allowFileAccessFromFileURLs = true
+            settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            
+            // 🔥 FIX: URL में फाइल का नाम भेजने के बजाय सीधे कोड लोड करें
+            loadDataWithBaseURL("http://127.0.0.1:8080/", htmlCode, "text/html", "UTF-8", null)
             
             webChromeClient = WebChromeClient()
             webViewClient = WebViewClient()
             
-            loadDataWithBaseURL("https://www.binance.com", htmlCode, "text/html", "UTF-8", null)
             addJavascriptInterface(WebAppInterface(context), "Android")
-            
             isFocusable = true
             isFocusableInTouchMode = true
             requestFocus()
-            
             resumeTimers()
         }
-        
-        activeWebViews[scriptName] = webView
-        return webView
+
+        currentScriptName = scriptName
+        return myWebView!!
     }
 
-    // 🔥 WebView को पैरेंट (Activity) से सुरक्षित हटाना
-    fun detachFromParent(context: Context, webView: WebView) {
-        try {
-            val parent = webView.parent
-            if (parent != null) {
-                if (parent is ViewGroup) {
-                    parent.removeView(webView)
-                } else {
-                    val wm = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                    wm.removeView(webView)
-                }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    fun removeWebView(context: Context, scriptName: String) {
-        activeWebViews[scriptName]?.let {
-            it.removeJavascriptInterface("Android")
-            detachFromParent(context, it)
-            it.destroy()
-        }
-        activeWebViews.remove(scriptName)
+    fun destroyWebView() {
+        myWebView?.removeJavascriptInterface("Android")
+        myWebView?.destroy()
+        myWebView = null
+        currentScriptName = null
     }
 }
