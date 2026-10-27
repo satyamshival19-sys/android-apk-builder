@@ -2,6 +2,8 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
@@ -13,27 +15,29 @@ class DisplayActivity : Activity() {
     }
 
     private var webView: WebView? = null
+    private var container: FrameLayout? = null
+    private var scriptName: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
-
-        val fileName = intent.getStringExtra("SCRIPT_NAME")
-        if (fileName == null) {
+        scriptName = intent.getStringExtra("SCRIPT_NAME")
+        
+        if (scriptName == null) {
             finish()
             return
         }
 
-        // WebViewManager से वही WebView उठाओ जो मेमोरी में सेव है
-        webView = WebViewManager.getOrCreateWebView(this, fileName)
+        // मेमोरी से इस स्क्रिप्ट का WebView उठाओ
+        webView = WebViewManager.getOrCreateWebView(this, scriptName!!)
         
-        // अगर WebView पहले किसी स्क्रीन पर थी, तो उसे हटाओ
+        // अगर WebView पहले किसी स्क्रीन पर थी, तो उसे डिटैच करो
         (webView?.parent as? ViewGroup)?.removeView(webView)
         
-        // एक FrameLayout बनाकर उसमें WebView डालें
-        val layout = FrameLayout(this)
-        layout.addView(webView)
-        setContentView(layout)
+        // नया कंटेनर बनाकर उसमें डालो
+        container = FrameLayout(this)
+        container?.addView(webView)
+        setContentView(container)
     }
 
     override fun onPause() {
@@ -43,13 +47,17 @@ class DisplayActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        webView?.onResume()
-        webView?.resumeTimers()
+        // 🔥 BLACK SCREEN FIX: वापस आने पर व्यू को रिफ्रेश करें
+        Handler(Looper.getMainLooper()).postDelayed({
+            webView?.onResume()
+            webView?.resumeTimers()
+            webView?.requestLayout()
+            webView?.invalidate()
+        }, 100)
     }
 
     override fun onDestroy() {
-        // 🔥 FIX: यहाँ WebView को डिस्ट्रॉय नहीं करेंगे, सिर्फ स्क्रीन से हटाएंगे 
-        // ताकि आपकी सेटिंग (Alert Armed) वैसी ही रहे।
+        // 🔥 FIX: यहाँ WebView डिस्ट्रॉय नहीं होगा, वह मेमोरी में सेव रहेगा
         (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
