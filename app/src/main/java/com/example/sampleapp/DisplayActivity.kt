@@ -2,9 +2,9 @@ package com.example.sampleapp
 
 import android.app.Activity
 import android.os.Bundle
-import android.webkit.WebChromeClient
+import android.view.ViewGroup
 import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.FrameLayout
 
 class DisplayActivity : Activity() {
     
@@ -24,30 +24,18 @@ class DisplayActivity : Activity() {
             return
         }
 
-        // WebView हमेशा Activity के कॉन्टेक्स्ट से बनेगा (ड्रॉपडाउन के लिए)
-        webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true // Settings सेव रखने के लिए
-            settings.databaseEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            
-            // 🔥 लोकल सर्वर से लोड करें (ड्रॉपडाउन फिक्स)
-            loadUrl("http://127.0.0.1:8080/$fileName")
-            
-            webChromeClient = WebChromeClient() 
-            webViewClient = WebViewClient()
-            
-            addJavascriptInterface(WebAppInterface(this@DisplayActivity), "Android")
-            isFocusable = true
-            isFocusableInTouchMode = true
-            requestFocus()
-            resumeTimers()
-        }
+        // WebViewManager से वही WebView उठाओ जो मेमोरी में सेव है
+        webView = WebViewManager.getOrCreateWebView(this, fileName)
         
-        setContentView(webView)
+        // अगर WebView पहले किसी स्क्रीन पर थी, तो उसे हटाओ
+        (webView?.parent as? ViewGroup)?.removeView(webView)
+        
+        // एक FrameLayout बनाकर उसमें WebView डालें
+        val layout = FrameLayout(this)
+        layout.addView(webView)
+        setContentView(layout)
     }
 
-    // ऐप मिनिमाइज़ होने पर सिर्फ Pause होगा, डिस्ट्रॉय नहीं
     override fun onPause() {
         super.onPause()
         webView?.onPause()
@@ -60,8 +48,9 @@ class DisplayActivity : Activity() {
     }
 
     override fun onDestroy() {
-        webView?.destroy()
-        webView = null
+        // 🔥 FIX: यहाँ WebView को डिस्ट्रॉय नहीं करेंगे, सिर्फ स्क्रीन से हटाएंगे 
+        // ताकि आपकी सेटिंग (Alert Armed) वैसी ही रहे।
+        (webView?.parent as? ViewGroup)?.removeView(webView)
         instance = null
         super.onDestroy()
     }
