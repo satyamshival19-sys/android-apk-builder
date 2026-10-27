@@ -20,8 +20,6 @@ class MainActivity : Activity() {
     private lateinit var scriptsDir: File
     private val FILE_PICK_REQUEST = 101
     private val activeSwitches = mutableListOf<String>()
-    
-    // 🔥 FIX 6: Infinite Loop se bachne ke liye flag
     private var isLimitExceededAction = false 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,7 +124,12 @@ class MainActivity : Activity() {
                 setTextColor(android.graphics.Color.RED)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener {
-                    startActivity(Intent(this@MainActivity, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
+                    // 🔥 FIX: Agar toggle OFF hai toh script open mat karo
+                    if (activeSwitches.contains(file.name)) {
+                        startActivity(Intent(this@MainActivity, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
+                    } else {
+                        Toast.makeText(this@MainActivity, "Pehle Toggle ON karein!", Toast.LENGTH_SHORT).show()
+                    }
                 }
                 setOnLongClickListener { showRenameDialog(file); true }
             }
@@ -144,10 +147,9 @@ class MainActivity : Activity() {
             toggle.text = if (isRunning) "ON" else "OFF"
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
-                if (isLimitExceededAction) return@setOnCheckedChangeListener // Loop avoid
+                if (isLimitExceededAction) return@setOnCheckedChangeListener
 
                 if (isChecked) {
-                    // 🔥 FIX 7: 5th toggle par Banner
                     if (activeSwitches.size >= 4) {
                         isLimitExceededAction = true
                         toggle.isChecked = false
@@ -162,7 +164,9 @@ class MainActivity : Activity() {
                     
                     toggle.text = "ON"
                     activeSwitches.add(file.name)
-                    prefs.edit().putBoolean("run_${file.name}", true).apply()
+                    
+                    // 🔥 FIX: commit() use kiya taaki state turant save ho
+                    prefs.edit().putBoolean("run_${file.name}", true).commit()
                     
                     startService(Intent(this, HtmlService::class.java))
                     startActivity(Intent(this, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
@@ -171,9 +175,10 @@ class MainActivity : Activity() {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
                     
-                    // 🔥 FIX 8: Specific script ka data clear
                     WebViewManager.removeWebView(file.name)
-                    prefs.edit().putBoolean("run_${file.name}", false).apply()
+                    
+                    // 🔥 FIX: commit() use kiya
+                    prefs.edit().putBoolean("run_${file.name}", false).commit()
                     
                     if (activeSwitches.isEmpty()) stopService(Intent(this, HtmlService::class.java))
                 }
@@ -222,7 +227,7 @@ class MainActivity : Activity() {
             .setPositiveButton("हाँ") { _, _ ->
                 activeSwitches.remove(file.name)
                 WebViewManager.removeWebView(file.name)
-                getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
+                getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).commit()
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
                     refreshList()
