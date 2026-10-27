@@ -17,7 +17,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="मेरी स्क्रिप्ट्स (अधिकतम 12, एक समय पर 1):"
+        android:text="मेरी स्क्रिप्ट्स (अधिकतम 12, एक समय पर 4):"
         android:textSize="16sp"
         android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
