@@ -11,17 +11,17 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
 import android.webkit.WebStorage
-import java.io.File
+import android.widget.Toast
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
-    private var isUserSwiped = false
     private var server: LocalServer? = null
+    private var isServiceStopped = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try { startForeground(1, buildNotification()) } catch (e: Exception) {}
+        startForeground(1, buildNotification())
 
         if (server == null) {
             server = LocalServer(applicationContext, 8080)
@@ -31,23 +31,23 @@ class HtmlService : Service() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
-            wakeLock?.acquire() 
+            wakeLock?.acquire()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 🔥 FIX: अगर OS ने ऐप को मारा था और वह रीस्टार्ट हुआ है, 
-        // तो यह पुरानी चालू स्क्रिप्ट्स को अपने आप वापस चालू कर देगा।
+        if (intent?.action == "STOP_SERVICE") {
+            isServiceStopped = true
+            WebViewManager.destroyAllWebViews()
+            WebStorage.getInstance().deleteAllData()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        val allKeys = prefs.all
-        for ((key, value) in allKeys) {
+        for ((key, value) in prefs.all) {
             if (key.startsWith("run_") && value == true) {
-                val savedScript = key.replace("run_", "")
-                val file = File(filesDir, "scripts/$savedScript")
-                if (file.exists()) {
-                    // वेबव्यू को फिर से मेमोरी में लोड करें
-                    WebViewManager.getOrCreateWebView(this, savedScript)
-                }
+                WebViewManager.getOrCreateWebView(applicationContext, key.replace("run_", ""))
             }
         }
         return START_STICKY
@@ -57,47 +57,46 @@ class HtmlService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
-            )
+            val channel = NotificationChannel("html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
+        val stopIntent = Intent(this, HtmlService::class.java).apply { action = "STOP_SERVICE" }
+        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
-            .setContentText("आपकी स्क्रिप्ट्स 24x7 चल रही हैं...")
+            .setContentTitle("App Running")
+            .setContentText("Scripts are active in background...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_delete, "STOP", stopPendingIntent)
             .build()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // यह सिर्फ तब चलेगा जब आप खुद ऐप को Recent Apps से स्वाइप करके हटाएँगे
-        isUserSwiped = true
-        WebViewManager.destroyAllWebViews()
-        WebStorage.getInstance().deleteAllData()
-        
-        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        
-        stopSelf()
+        // Point 1: Background se hatne par app run kare, data reset na ho
+        Toast.makeText(applicationContext, "App background mein chal rahi hai...", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroy() {
-        // 🔥 Immortal (अमर) फीचर: अगर OS मारे, तो 1 सेकंड में रीस्टार्ट हो
-        if (!isUserSwiped) {
+        // Point 4: 1 sec (1000ms) timer for auto-restart
+        if (!isServiceStopped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
             val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarm.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            } else {
+                alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            }
         }
         
         server?.stop()
         server = null
-
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
