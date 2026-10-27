@@ -36,17 +36,14 @@ class HtmlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 🔥 FIX: अगर OS ने ऐप को मारा था और वह रीस्टार्ट हुआ है, 
-        // तो यह पुरानी चालू स्क्रिप्ट्स को अपने आप वापस चालू कर देगा।
+        // 🔥 FIX 4: OS ne kill kiya toh restart hone par scripts wapas load karo
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        val allKeys = prefs.all
-        for ((key, value) in allKeys) {
+        for ((key, value) in prefs.all) {
             if (key.startsWith("run_") && value == true) {
                 val savedScript = key.replace("run_", "")
                 val file = File(filesDir, "scripts/$savedScript")
                 if (file.exists()) {
-                    // वेबव्यू को फिर से मेमोरी में लोड करें
-                    WebViewManager.getOrCreateWebView(this, savedScript)
+                    WebViewManager.getOrCreateWebView(applicationContext, savedScript)
                 }
             }
         }
@@ -57,9 +54,7 @@ class HtmlService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH
-            )
+            val channel = NotificationChannel("html_alert_channel", "Script Alerts", NotificationManager.IMPORTANCE_HIGH)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
@@ -75,29 +70,29 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // यह सिर्फ तब चलेगा जब आप खुद ऐप को Recent Apps से स्वाइप करके हटाएँगे
+        // Ye sirf Recent Apps se swipe karne par chalega (Sab data clear)
         isUserSwiped = true
         WebViewManager.destroyAllWebViews()
         WebStorage.getInstance().deleteAllData()
-        
-        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        
+        getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().clear().apply()
         stopSelf()
     }
 
     override fun onDestroy() {
-        // 🔥 Immortal (अमर) फीचर: अगर OS मारे, तो 1 सेकंड में रीस्टार्ट हो
+        // 🔥 FIX 5: Microsecond (1000ms) Auto Restart
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
             val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarm.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            } else {
+                alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            }
         }
-        
         server?.stop()
         server = null
-
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
