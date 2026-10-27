@@ -14,13 +14,18 @@ import android.os.SystemClock
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var isUserSwiped = false
+    private var server: LocalServer? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try {
-            startForeground(1, buildNotification())
-        } catch (e: Exception) {}
+        try { startForeground(1, buildNotification()) } catch (e: Exception) {}
+
+        // 🔥 लोकल सर्वर शुरू करें
+        if (server == null) {
+            server = LocalServer(applicationContext, 8080)
+            try { server?.start() } catch (e: Exception) { e.printStackTrace() }
+        }
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (wakeLock == null) {
@@ -30,22 +35,7 @@ class HtmlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        val scriptName = intent?.getStringExtra("SCRIPT_NAME")
-
-        if (scriptName != null) {
-            if (action == "START") {
-                // 🔥 FIX: यहाँ से WebView बनाना हटा दिया गया है। 
-                // अब WebView सिर्फ DisplayActivity बनाएगी (Activity Context के साथ)।
-                // सर्विस सिर्फ बैकग्राउंड में जिंदा रहेगी।
-            } else if (action == "STOP") {
-                WebViewManager.removeWebView(this, scriptName)
-                if (WebViewManager.activeWebViews.isEmpty()) {
-                    stopSelf()
-                }
-            }
-        }
-
+        // सर्विस को जिंदा रखने के लिए START_STICKY
         return START_STICKY
     }
 
@@ -63,7 +53,7 @@ class HtmlService : Service() {
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, "html_alert_channel")
             .setContentTitle("बैकग्राउंड सर्विस एक्टिव")
-            .setContentText("आपकी स्क्रिप्ट्स बिना रुके चल रही हैं...")
+            .setContentText("आपकी स्क्रिप्ट्स 24x7 चल रही हैं...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -72,10 +62,11 @@ class HtmlService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
+        // तो सारी सेटिंग रीसेट हो जाएँ और टॉगल OFF हो जाएँ।
         isUserSwiped = true
-        for (key in WebViewManager.activeWebViews.keys.toList()) {
-            WebViewManager.removeWebView(this, key)
-        }
+        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        
         stopSelf()
     }
 
@@ -88,6 +79,9 @@ class HtmlService : Service() {
             alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
         }
         
+        server?.stop()
+        server = null
+
         if (wakeLock?.isHeld == true) wakeLock?.release()
         super.onDestroy()
     }
