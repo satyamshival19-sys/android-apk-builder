@@ -11,6 +11,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
 import android.webkit.WebStorage
+import java.io.File
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -35,6 +36,20 @@ class HtmlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 🔥 FIX: अगर OS ने ऐप को मारा था और वह रीस्टार्ट हुआ है, 
+        // तो यह पुरानी चालू स्क्रिप्ट्स को अपने आप वापस चालू कर देगा।
+        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        val allKeys = prefs.all
+        for ((key, value) in allKeys) {
+            if (key.startsWith("run_") && value == true) {
+                val savedScript = key.replace("run_", "")
+                val file = File(filesDir, "scripts/$savedScript")
+                if (file.exists()) {
+                    // वेबव्यू को फिर से मेमोरी में लोड करें
+                    WebViewManager.getOrCreateWebView(this, savedScript)
+                }
+            }
+        }
         return START_STICKY
     }
 
@@ -60,9 +75,8 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // यह सिर्फ तब चलेगा जब आप खुद ऐप को Recent Apps से स्वाइप करके हटाएँगे
         isUserSwiped = true
-        
-        // 🔥 RESET FIX: ऐप को Recent Apps से हटाने पर सारा डेटा और सेटिंग्स रीसेट
         WebViewManager.destroyAllWebViews()
         WebStorage.getInstance().deleteAllData()
         
