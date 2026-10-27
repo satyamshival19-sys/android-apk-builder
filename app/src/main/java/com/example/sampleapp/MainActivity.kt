@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.Gravity
-// import android.webkit.WebStorage // ❌ HATA DIYA (Point 2 & 3)
 import android.widget.*
 import android.Manifest
 import java.io.File
@@ -21,6 +20,9 @@ class MainActivity : Activity() {
     private lateinit var scriptsDir: File
     private val FILE_PICK_REQUEST = 101
     private val activeSwitches = mutableListOf<String>()
+    
+    // 🔥 FIX 6: Infinite Loop se bachne ke liye flag
+    private var isLimitExceededAction = false 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,17 +32,13 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
         }
 
-        // Overlay परमिशन चेक
         if (!Settings.canDrawOverlays(this)) {
             AlertDialog.Builder(this)
                 .setTitle("Permission Required")
                 .setMessage("बैकग्राउंड में चलने के लिए कृपया 'Display over other apps' की परमिशन दें।")
                 .setPositiveButton("Allow") { _, _ ->
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                    startActivity(intent)
-                }
-                .setCancelable(false)
-                .show()
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                }.setCancelable(false).show()
         }
 
         scriptsDir = File(filesDir, "scripts")
@@ -53,7 +51,6 @@ class MainActivity : Activity() {
             intent.type = "*/*"
             startActivityForResult(intent, FILE_PICK_REQUEST)
         }
-
         refreshList()
     }
 
@@ -88,12 +85,11 @@ class MainActivity : Activity() {
             }
 
             val file = File(scriptsDir, fileName)
-            val inputStream = contentResolver.openInputStream(uri)
-            val outputStream = FileOutputStream(file)
-            inputStream?.copyTo(outputStream)
-            inputStream?.close()
-            outputStream.close()
-            
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                FileOutputStream(file).use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
             Toast.makeText(this, "फाइल जुड़ गई: $fileName", Toast.LENGTH_SHORT).show()
             refreshList()
         } catch (e: Exception) {
@@ -107,49 +103,39 @@ class MainActivity : Activity() {
         
         activeSwitches.clear()
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        val allKeys = prefs.all
-        for ((key, value) in allKeys) {
-            if (key.startsWith("run_") && value == true) {
-                activeSwitches.add(key.replace("run_", ""))
-            }
+        for ((key, value) in prefs.all) {
+            if (key.startsWith("run_") && value == true) activeSwitches.add(key.replace("run_", ""))
         }
 
         if (files == null || files.isEmpty()) {
-            val tv = TextView(this)
-            tv.text = "कोई स्क्रिप्ट नहीं मिली।"
+            val tv = TextView(this).apply { text = "कोई स्क्रिप्ट नहीं मिली।" }
             listContainer.addView(tv)
             return
         }
 
         for (file in files) {
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(0, 20, 0, 20)
-
-            val tv = TextView(this)
-            tv.text = file.name
-            tv.textSize = 16f
-            tv.setTextColor(android.graphics.Color.RED)
-            tv.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-
-            tv.setOnClickListener {
-                val intent = Intent(this, DisplayActivity::class.java)
-                intent.putExtra("SCRIPT_NAME", file.name)
-                startActivity(intent)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 20, 0, 20)
             }
 
-            tv.setOnLongClickListener {
-                showRenameDialog(file)
-                true
+            val tv = TextView(this).apply {
+                text = file.name
+                textSize = 16f
+                setTextColor(android.graphics.Color.RED)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener {
+                    startActivity(Intent(this@MainActivity, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
+                }
+                setOnLongClickListener { showRenameDialog(file); true }
             }
 
-            val btnDelete = TextView(this)
-            btnDelete.text = "🗑️"
-            btnDelete.textSize = 20f
-            btnDelete.setPadding(24, 0, 24, 0)
-            btnDelete.setOnClickListener {
-                showDeleteDialog(file)
+            val btnDelete = TextView(this).apply {
+                text = "🗑️"
+                textSize = 20f
+                setPadding(24, 0, 24, 0)
+                setOnClickListener { showDeleteDialog(file) }
             }
 
             val toggle = Switch(this)
@@ -158,38 +144,38 @@ class MainActivity : Activity() {
             toggle.text = if (isRunning) "ON" else "OFF"
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
+                if (isLimitExceededAction) return@setOnCheckedChangeListener // Loop avoid
+
                 if (isChecked) {
-                    // 4 स्क्रिप्ट की लिमिट (Point 1)
+                    // 🔥 FIX 7: 5th toggle par Banner
                     if (activeSwitches.size >= 4) {
+                        isLimitExceededAction = true
                         toggle.isChecked = false
-                        Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
+                        isLimitExceededAction = false
+                        
+                        AlertDialog.Builder(this)
+                            .setTitle("Limit Reached")
+                            .setMessage("Aap ek samay par sirf 4 scripts chala sakte hain. Kripya pehle kisi ek script ka toggle OFF karein.")
+                            .setPositiveButton("OK", null).show()
                         return@setOnCheckedChangeListener
                     }
                     
                     toggle.text = "ON"
-                    if (!activeSwitches.contains(file.name)) activeSwitches.add(file.name)
-                    
-                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", true).apply()
+                    activeSwitches.add(file.name)
+                    prefs.edit().putBoolean("run_${file.name}", true).apply()
                     
                     startService(Intent(this, HtmlService::class.java))
-                    
-                    val intent = Intent(this, DisplayActivity::class.java)
-                    intent.putExtra("SCRIPT_NAME", file.name)
-                    startActivity(intent)
+                    startActivity(Intent(this, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
                     
                 } else {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
                     
-                    // 🔥 RESET FIX (Point 2 & 3): Sirf is specific script ka data aur setting reset hogi
+                    // 🔥 FIX 8: Specific script ka data clear
                     WebViewManager.removeWebView(file.name)
-                    // WebStorage.getInstance().deleteAllData() // ❌ IS LINE KO HATA DIYA GAYA HAI
+                    prefs.edit().putBoolean("run_${file.name}", false).apply()
                     
-                    getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
-                    
-                    if (activeSwitches.isEmpty()) {
-                        stopService(Intent(this, HtmlService::class.java))
-                    }
+                    if (activeSwitches.isEmpty()) stopService(Intent(this, HtmlService::class.java))
                 }
             }
 
@@ -203,25 +189,22 @@ class MainActivity : Activity() {
     private fun showRenameDialog(file: File) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("स्क्रिप्ट का नाम बदलें")
-        val input = EditText(this)
-        input.setText(file.name)
-        input.setSelection(file.name.lastIndexOf("."))
+        val input = EditText(this).apply {
+            setText(file.name)
+            setSelection(file.name.lastIndexOf("."))
+        }
         builder.setView(input)
 
         builder.setPositiveButton("बदलें") { _, _ ->
             var newName = input.text.toString().trim()
             if (newName.isEmpty()) return@setPositiveButton
-            
             if (!newName.endsWith(".html", ignoreCase = true)) newName += ".html"
             if (newName == file.name) return@setPositiveButton
 
             val newFile = File(scriptsDir, newName)
             if (newFile.exists()) {
                 Toast.makeText(this, "इस नाम की फाइल पहले से मौजूद है!", Toast.LENGTH_SHORT).show()
-                return@setPositiveButton
-            }
-
-            if (file.renameTo(newFile)) {
+            } else if (file.renameTo(newFile)) {
                 Toast.makeText(this, "नाम बदल गया!", Toast.LENGTH_SHORT).show()
                 refreshList()
             } else {
@@ -240,7 +223,6 @@ class MainActivity : Activity() {
                 activeSwitches.remove(file.name)
                 WebViewManager.removeWebView(file.name)
                 getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
-                
                 if (file.delete()) {
                     Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
                     refreshList()
