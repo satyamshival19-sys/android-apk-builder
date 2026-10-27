@@ -36,10 +36,11 @@ class HtmlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 🔥 FIX 4: OS ne kill kiya toh restart hone par scripts wapas load karo
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        
+        // 🔥 FIX: Sirf wahi scripts load karo jo sach mein ON hain
         for ((key, value) in prefs.all) {
-            if (key.startsWith("run_") && value == true) {
+            if (key.startsWith("run_") && value == true) { 
                 val savedScript = key.replace("run_", "")
                 val file = File(filesDir, "scripts/$savedScript")
                 if (file.exists()) {
@@ -70,7 +71,6 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Ye sirf Recent Apps se swipe karne par chalega (Sab data clear)
         isUserSwiped = true
         WebViewManager.destroyAllWebViews()
         WebStorage.getInstance().deleteAllData()
@@ -79,7 +79,6 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
-        // 🔥 FIX 5: Microsecond (1000ms) Auto Restart
         if (!isUserSwiped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
