@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
+import android.webkit.WebStorage
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -21,7 +22,6 @@ class HtmlService : Service() {
         createNotificationChannel()
         try { startForeground(1, buildNotification()) } catch (e: Exception) {}
 
-        // 🔥 लोकल सर्वर शुरू करें
         if (server == null) {
             server = LocalServer(applicationContext, 8080)
             try { server?.start() } catch (e: Exception) { e.printStackTrace() }
@@ -35,7 +35,6 @@ class HtmlService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // सर्विस को जिंदा रखने के लिए START_STICKY
         return START_STICKY
     }
 
@@ -61,9 +60,12 @@ class HtmlService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // पॉइंट 4 और 6: जब ऐप को बैकग्राउंड (Recent Apps) से हटाया जाए
-        // तो सारी सेटिंग रीसेट हो जाएँ और टॉगल OFF हो जाएँ।
         isUserSwiped = true
+        
+        // 🔥 RESET FIX: ऐप को Recent Apps से हटाने पर सारा डेटा और सेटिंग्स रीसेट
+        WebViewManager.destroyAllWebViews()
+        WebStorage.getInstance().deleteAllData()
+        
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
         
