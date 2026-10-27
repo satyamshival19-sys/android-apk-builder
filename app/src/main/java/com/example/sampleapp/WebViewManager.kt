@@ -19,7 +19,6 @@ object WebViewManager {
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
 
-        // 🔥 FIX 1: applicationContext ka use kiya taaki background mein WebView zinda rahe
         val appContext = context.applicationContext
         
         val newWebView = WebView(appContext).apply {
@@ -28,7 +27,7 @@ object WebViewManager {
             settings.databaseEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             
-            // 🔥 FIX 2: Har script ke liye ALAG URL banaya taaki Local Storage alag rahe
+            // Unique URL for Isolated Local Storage
             val safeName = scriptName.replace(" ", "_").replace(".", "_")
             loadDataWithBaseURL("http://127.0.0.1:8080/$safeName/", htmlCode, "text/html", "UTF-8", null)
             
@@ -47,12 +46,20 @@ object WebViewManager {
 
     fun removeWebView(scriptName: String) {
         webViewMap[scriptName]?.let { webView ->
-            // 🔥 BUG FIX: JS async problem ko hata kar Kotlin se direct specific origin ka data clear kiya
             val safeName = scriptName.replace(" ", "_").replace(".", "_")
             val originUrl = "http://127.0.0.1:8080/$safeName/"
+            
+            // 1. Clear specific storage
             WebStorage.getInstance().deleteOrigin(originUrl) 
             
+            // 2. Kill JS timers (Stop alerts immediately)
+            webView.stopLoading()
+            webView.loadUrl("about:blank") 
+            webView.clearCache(true)
+            webView.clearHistory()
             webView.removeJavascriptInterface("Android")
+            
+            // 3. Destroy View
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
         }
