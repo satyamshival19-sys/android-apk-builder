@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.Gravity
+import android.webkit.WebStorage
 import android.widget.*
 import android.Manifest
 import java.io.File
@@ -72,7 +73,6 @@ class MainActivity : Activity() {
     private fun saveHtmlFile(uri: Uri) {
         try {
             val files = scriptsDir.listFiles { file -> file.extension == "html" }
-            // 🔥 12 फाइलों की लिमिट
             if (files != null && files.size >= 12) {
                 Toast.makeText(this, "आप केवल 12 फाइलें ही रख सकते हैं!", Toast.LENGTH_LONG).show()
                 return
@@ -106,7 +106,6 @@ class MainActivity : Activity() {
         val files = scriptsDir.listFiles { file -> file.extension == "html" }
         
         activeSwitches.clear()
-        // जो टॉगल पहले से ऑन हैं, उन्हें ट्रैक करें
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         val allKeys = prefs.all
         for ((key, value) in allKeys) {
@@ -160,7 +159,7 @@ class MainActivity : Activity() {
 
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
-                    // 🔥 4 स्क्रिप्ट की लिमिट
+                    // 4 स्क्रिप्ट की लिमिट
                     if (activeSwitches.size >= 4) {
                         toggle.isChecked = false
                         Toast.makeText(this, "एक समय पर केवल 4 स्क्रिप्ट ही चल सकती हैं!", Toast.LENGTH_SHORT).show()
@@ -168,17 +167,12 @@ class MainActivity : Activity() {
                     }
                     
                     toggle.text = "ON"
-                    if (!activeSwitches.contains(file.name)) {
-                        activeSwitches.add(file.name)
-                    }
+                    if (!activeSwitches.contains(file.name)) activeSwitches.add(file.name)
                     
-                    // सेव करें कि यह स्क्रिप्ट चल रही है
                     getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", true).apply()
                     
-                    // सर्विस शुरू करें
                     startService(Intent(this, HtmlService::class.java))
                     
-                    // पॉइंट 7: टॉगल ON करते ही स्क्रिप्ट स्क्रीन पर खुले
                     val intent = Intent(this, DisplayActivity::class.java)
                     intent.putExtra("SCRIPT_NAME", file.name)
                     startActivity(intent)
@@ -187,10 +181,12 @@ class MainActivity : Activity() {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
                     
-                    // सेव करें कि यह स्क्रिप्ट बंद हो गई है
+                    // 🔥 RESET FIX: टॉगल बंद करते ही सिर्फ इस स्क्रिप्ट की सेटिंग रीसेट होगी
+                    WebViewManager.removeWebView(file.name)
+                    WebStorage.getInstance().deleteAllData()
+                    
                     getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
                     
-                    // अगर कोई और स्क्रिप्ट नहीं चल रही, तो सर्विस बंद करें
                     if (activeSwitches.isEmpty()) {
                         stopService(Intent(this, HtmlService::class.java))
                     }
@@ -242,6 +238,7 @@ class MainActivity : Activity() {
             .setMessage("क्या आप वाकई ${file.name} को डिलीट करना चाहते हैं?")
             .setPositiveButton("हाँ") { _, _ ->
                 activeSwitches.remove(file.name)
+                WebViewManager.removeWebView(file.name)
                 getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).apply()
                 
                 if (file.delete()) {
