@@ -4,12 +4,14 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.Gravity
+import android.webkit.WebStorage
 import android.widget.*
 import android.Manifest
 import java.io.File
@@ -97,16 +99,51 @@ class MainActivity : Activity() {
 
     private fun refreshList() {
         listContainer.removeAllViews()
+        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        
+        // 🔥 NEW: MASTER STOP/START TOGGLE
+        val isMasterRunning = prefs.getBoolean("master_running", false)
+        val masterLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(20, 20, 20, 20)
+            setBackgroundColor(Color.parseColor("#1E222D"))
+        }
+        val masterSwitch = Switch(this).apply {
+            isChecked = isMasterRunning
+            text = if (isMasterRunning) " 🟢 APP ON" else " 🔴 APP OFF"
+            setTextColor(if (isMasterRunning) Color.GREEN else Color.RED)
+            textSize = 18f
+            setOnCheckedChangeListener { _, isChecked ->
+                prefs.edit().putBoolean("master_running", isChecked).commit()
+                if (isChecked) {
+                    startService(Intent(this@MainActivity, HtmlService::class.java))
+                } else {
+                    // Stop Service & Clear All
+                    val stopIntent = Intent(this@MainActivity, HtmlService::class.java).apply { action = "STOP_SERVICE" }
+                    startService(stopIntent)
+                    WebViewManager.destroyAllWebViews()
+                    WebStorage.getInstance().deleteAllData()
+                    for ((key, value) in prefs.all) {
+                        if (key.startsWith("run_")) prefs.edit().putBoolean(key, false).commit()
+                    }
+                }
+                refreshList() // UI Update
+            }
+        }
+        masterLayout.addView(masterSwitch)
+        listContainer.addView(masterLayout)
+
+        // Baaki purana list logic
         val files = scriptsDir.listFiles { file -> file.extension == "html" }
         
         activeSwitches.clear()
-        val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         for ((key, value) in prefs.all) {
             if (key.startsWith("run_") && value == true) activeSwitches.add(key.replace("run_", ""))
         }
 
         if (files == null || files.isEmpty()) {
-            val tv = TextView(this).apply { text = "कोई स्क्रिप्ट नहीं मिली।" }
+            val tv = TextView(this).apply { text = "कोई स्क्रिप्ट नहीं मिली।"; setTextColor(Color.WHITE); setPadding(20,20,20,20) }
             listContainer.addView(tv)
             return
         }
@@ -124,7 +161,6 @@ class MainActivity : Activity() {
                 setTextColor(android.graphics.Color.RED)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener {
-                    // 🔥 FIX: Agar toggle OFF hai toh script open mat karo
                     if (activeSwitches.contains(file.name)) {
                         startActivity(Intent(this@MainActivity, DisplayActivity::class.java).putExtra("SCRIPT_NAME", file.name))
                     } else {
@@ -146,10 +182,22 @@ class MainActivity : Activity() {
             toggle.isChecked = isRunning
             toggle.text = if (isRunning) "ON" else "OFF"
 
+            // 🔥 Master OFF hone par individual toggles disable
+            if (!isMasterRunning) {
+                toggle.isEnabled = false
+                toggle.alpha = 0.5f
+            }
+
             toggle.setOnCheckedChangeListener { _, isChecked ->
                 if (isLimitExceededAction) return@setOnCheckedChangeListener
 
                 if (isChecked) {
+                    if (!prefs.getBoolean("master_running", false)) {
+                        toggle.isChecked = false
+                        Toast.makeText(this, "Pehle Master Switch ON karein!", Toast.LENGTH_SHORT).show()
+                        return@setOnCheckedChangeListener
+                    }
+
                     if (activeSwitches.size >= 4) {
                         isLimitExceededAction = true
                         toggle.isChecked = false
@@ -157,15 +205,13 @@ class MainActivity : Activity() {
                         
                         AlertDialog.Builder(this)
                             .setTitle("Limit Reached")
-                            .setMessage("Aap ek samay par sirf 4 scripts chala sakte hain. Kripya pehle kisi ek script ka toggle OFF karein.")
+                            .setMessage("Aap ek samay par sirf 4 scripts chala sakte hain.")
                             .setPositiveButton("OK", null).show()
                         return@setOnCheckedChangeListener
                     }
                     
                     toggle.text = "ON"
                     activeSwitches.add(file.name)
-                    
-                    // 🔥 FIX: commit() use kiya taaki state turant save ho
                     prefs.edit().putBoolean("run_${file.name}", true).commit()
                     
                     startService(Intent(this, HtmlService::class.java))
@@ -174,13 +220,8 @@ class MainActivity : Activity() {
                 } else {
                     toggle.text = "OFF"
                     activeSwitches.remove(file.name)
-                    
                     WebViewManager.removeWebView(file.name)
-                    
-                    // 🔥 FIX: commit() use kiya
                     prefs.edit().putBoolean("run_${file.name}", false).commit()
-                    
-                    if (activeSwitches.isEmpty()) stopService(Intent(this, HtmlService::class.java))
                 }
             }
 
@@ -194,10 +235,7 @@ class MainActivity : Activity() {
     private fun showRenameDialog(file: File) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("स्क्रिप्ट का नाम बदलें")
-        val input = EditText(this).apply {
-            setText(file.name)
-            setSelection(file.name.lastIndexOf("."))
-        }
+        val input = EditText(this).apply { setText(file.name); setSelection(file.name.lastIndexOf(".")) }
         builder.setView(input)
 
         builder.setPositiveButton("बदलें") { _, _ ->
@@ -210,10 +248,7 @@ class MainActivity : Activity() {
             if (newFile.exists()) {
                 Toast.makeText(this, "इस नाम की फाइल पहले से मौजूद है!", Toast.LENGTH_SHORT).show()
             } else if (file.renameTo(newFile)) {
-                Toast.makeText(this, "नाम बदल गया!", Toast.LENGTH_SHORT).show()
                 refreshList()
-            } else {
-                Toast.makeText(this, "नाम नहीं बदल पाया!", Toast.LENGTH_SHORT).show()
             }
         }
         builder.setNegativeButton("रद्द करें") { dialog, _ -> dialog.cancel() }
@@ -228,10 +263,7 @@ class MainActivity : Activity() {
                 activeSwitches.remove(file.name)
                 WebViewManager.removeWebView(file.name)
                 getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putBoolean("run_${file.name}", false).commit()
-                if (file.delete()) {
-                    Toast.makeText(this, "फाइल डिलीट हो गई!", Toast.LENGTH_SHORT).show()
-                    refreshList()
-                }
+                if (file.delete()) refreshList()
             }
             .setNegativeButton("नहीं", null)
             .show()
