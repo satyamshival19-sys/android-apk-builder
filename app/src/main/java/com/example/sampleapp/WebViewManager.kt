@@ -52,7 +52,7 @@ object WebViewManager {
             // 1. Clear specific storage
             WebStorage.getInstance().deleteOrigin(originUrl) 
             
-            // 2. Kill JS timers (Stop alerts immediately)
+            // 2. Kill JS timers (Stop ghost alerts)
             webView.stopLoading()
             webView.loadUrl("about:blank") 
             webView.clearCache(true)
