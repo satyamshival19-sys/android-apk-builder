@@ -26,7 +26,7 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        // 🔥 FIX: onPause nahi lagaya taaki background mein alert/JS chalta rahe
+        // Background mein JS chalne ke liye pause nahi kiya
     }
 
     override fun onResume() {
