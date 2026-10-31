@@ -3,14 +3,20 @@ package com.example.sampleapp
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.view.Gravity
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.widget.FrameLayout
 import androidx.core.app.NotificationCompat
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.os.SystemClock
-import android.webkit.WebStorage
 import android.widget.Toast
 import java.io.File
 
@@ -18,6 +24,57 @@ class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var isUserStopped = false 
     private var server: LocalServer? = null
+
+    companion object {
+        private var windowManager: WindowManager? = null
+        private val overlayViews = HashMap<WebView, FrameLayout>()
+
+        // ZERO-SIZE WINDOW HACK
+        fun attachWebViewToOverlay(webView: WebView) {
+            if (windowManager == null) {
+                windowManager = webView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            }
+            if (overlayViews.containsKey(webView)) return
+            
+            val params = WindowManager.LayoutParams(
+                1, 1, // 1x1 pixel window
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
+                else 
+                    WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or 
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, // Screen ko sone se rokega
+                PixelFormat.TRANSLUCENT
+            )
+            params.gravity = Gravity.TOP or Gravity.START
+            params.x = 0
+            params.y = 0
+            
+            val container = FrameLayout(webView.context)
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            container.addView(webView)
+            
+            try {
+                windowManager?.addView(container, params)
+                overlayViews[webView] = container
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        fun detachWebViewFromOverlay(webView: WebView) {
+            val container = overlayViews[webView] ?: return
+            try {
+                windowManager?.removeView(container)
+                (webView.parent as? ViewGroup)?.removeView(webView)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            overlayViews.remove(webView)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -34,10 +91,25 @@ class HtmlService : Service() {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
             wakeLock?.acquire() 
         }
+        
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        setupWatchdogAlarm() // 🔥 CPU ko jagaye rakhne ke liye
+    }
+
+    private fun setupWatchdogAlarm() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, HtmlService::class.java)
+        val pendingIntent = PendingIntent.getService(this, 2, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        
+        // Har 1 minute me alarm bajega (OS ko lagatar jagata rahega)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60000, pendingIntent)
+        } else {
+            alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60000, pendingIntent)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 🔥 Notification STOP button logic
         if (intent?.action == "STOP_SERVICE") {
             isUserStopped = true
             WebViewManager.destroyAllWebViews()
@@ -46,6 +118,9 @@ class HtmlService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+
+        // Watchdog ko reset karein
+        setupWatchdogAlarm()
 
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         for ((key, value) in prefs.all) {
@@ -70,12 +145,11 @@ class HtmlService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        // 🔥 Notification STOP Button
         val stopIntent = Intent(this, HtmlService::class.java).apply { action = "STOP_SERVICE" }
         val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("App Running")
+            .setContentTitle("App Running (100% Immortal)")
             .setContentText("Scripts are active in background...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
@@ -83,14 +157,17 @@ class HtmlService : Service() {
             .build()
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // 🔥 OS memory clear karne ki koshish karega, hum use ignore karenge
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 🔥 FIX: App background se swipe hone par band NAHI hogi
         Toast.makeText(applicationContext, "App background mein chalti rahegi...", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroy() {
-        // Auto-Restart (1 sec) agar user ne STOP nahi kiya
         if (!isUserStopped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
