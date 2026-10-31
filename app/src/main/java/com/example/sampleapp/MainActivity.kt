@@ -101,7 +101,6 @@ class MainActivity : Activity() {
         listContainer.removeAllViews()
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         
-        // 🔥 NEW: MASTER STOP/START TOGGLE
         val isMasterRunning = prefs.getBoolean("master_running", false)
         val masterLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -119,7 +118,6 @@ class MainActivity : Activity() {
                 if (isChecked) {
                     startService(Intent(this@MainActivity, HtmlService::class.java))
                 } else {
-                    // Stop Service & Clear All
                     val stopIntent = Intent(this@MainActivity, HtmlService::class.java).apply { action = "STOP_SERVICE" }
                     startService(stopIntent)
                     WebViewManager.destroyAllWebViews()
@@ -128,13 +126,12 @@ class MainActivity : Activity() {
                         if (key.startsWith("run_")) prefs.edit().putBoolean(key, false).commit()
                     }
                 }
-                refreshList() // UI Update
+                refreshList()
             }
         }
         masterLayout.addView(masterSwitch)
         listContainer.addView(masterLayout)
 
-        // Baaki purana list logic
         val files = scriptsDir.listFiles { file -> file.extension == "html" }
         
         activeSwitches.clear()
@@ -182,7 +179,6 @@ class MainActivity : Activity() {
             toggle.isChecked = isRunning
             toggle.text = if (isRunning) "ON" else "OFF"
 
-            // 🔥 Master OFF hone par individual toggles disable
             if (!isMasterRunning) {
                 toggle.isEnabled = false
                 toggle.alpha = 0.5f
