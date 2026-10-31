@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.FrameLayout
 
@@ -14,6 +15,10 @@ class DisplayActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Screen ko hamesha on rakhne ke liye
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        
         val scriptName = intent.getStringExtra("SCRIPT_NAME") ?: return finish()
 
         webView = WebViewManager.getOrCreateWebView(this, scriptName)
@@ -26,20 +31,32 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        // Background mein JS chalne ke liye pause nahi kiya
+        // Activity pause hote hi WebView ko invisible overlay me bhej dein
+        webView?.let {
+            (it.parent as? ViewGroup)?.removeView(it)
+            HtmlService.attachWebViewToOverlay(it)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        Handler(Looper.getMainLooper()).postDelayed({
-            webView?.onResume()
-            webView?.resumeTimers()
-            webView?.requestLayout()
-            webView?.invalidate()
-        }, 100)
+        // Wapas aate hi overlay se nikal kar Activity me lagayein
+        webView?.let {
+            HtmlService.detachWebViewFromOverlay(it)
+            (it.parent as? ViewGroup)?.removeView(it) // Safety clear
+            container?.addView(it)
+            
+            Handler(Looper.getMainLooper()).postDelayed({
+                it.onResume()
+                it.resumeTimers()
+                it.requestLayout()
+                it.invalidate()
+            }, 100)
+        }
     }
 
     override fun onDestroy() {
+        HtmlService.detachWebViewFromOverlay(webView ?: return)
         (webView?.parent as? ViewGroup)?.removeView(webView)
         super.onDestroy()
     }
