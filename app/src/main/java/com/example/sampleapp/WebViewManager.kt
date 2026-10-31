@@ -1,6 +1,7 @@
 package com.example.sampleapp
 
 import android.content.Context
+import android.os.Build
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebStorage
@@ -25,14 +26,27 @@ object WebViewManager {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.databaseEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mediaPlaybackRequiresUserGesture = false 
+            settings.setSupportMultipleWindows(false)
+            settings.loadWithOverviewMode = true
             
-            // Unique URL for Isolated Local Storage
+            // 🔥 RENDERER PRIORITY HACK
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+            }
+            
             val safeName = scriptName.replace(" ", "_").replace(".", "_")
             loadDataWithBaseURL("http://127.0.0.1:8080/$safeName/", htmlCode, "text/html", "UTF-8", null)
             
             webChromeClient = WebChromeClient() 
-            webViewClient = WebViewClient()
+            
+            // 🔥 JAVASCRIPT INJECTION (Anti-Throttle & Speech Fix)
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    view?.let { injectAntiThrottleScript(it) }
+                }
+            }
             
             addJavascriptInterface(WebAppInterface(appContext), "Android")
             isFocusable = true
@@ -44,22 +58,72 @@ object WebViewManager {
         return newWebView
     }
 
+    private fun injectAntiThrottleScript(webView: WebView) {
+        val jsCode = """
+            (function() {
+                // 1. HTML Visibility Hack (OS ko lagega screen ON hai)
+                Object.defineProperty(document, 'hidden', { get: function() { return false; } });
+                Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
+                document.hasFocus = function() { return true; };
+
+                // 2. WebWorker Hack (Timer throttle rokne ke liye)
+                const workerCode = `setInterval(() => postMessage('tick'), 1000);`;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const worker = new Worker(URL.createObjectURL(blob));
+                worker.onmessage = function(e) {
+                    if(e.data === 'tick') {
+                        // Browser thread ko forcefully jagaye rakhe
+                        window.dispatchEvent(new Event('mousemove'));
+                    }
+                };
+
+                // 3. Silent Audio Hack (Background media block rokne ke liye)
+                let silentAudio = document.getElementById('__silent_wake__');
+                if (!silentAudio) {
+                    silentAudio = document.createElement('audio');
+                    silentAudio.id = '__silent_wake__';
+                    silentAudio.loop = true;
+                    silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+                    silentAudio.volume = 0.01;
+                    document.body.appendChild(silentAudio);
+                }
+                setInterval(() => {
+                    if (silentAudio.paused) silentAudio.play().catch(e => {});
+                }, 3000);
+
+                // 4. Speech Synthesis Fix (Awaaz na aane ka bug)
+                const originalSpeak = window.speechSynthesis.speak;
+                window.speechSynthesis.speak = function(utterance) {
+                    try {
+                        window.speechSynthesis.resume(); // Force resume
+                        originalSpeak.call(window.speechSynthesis, utterance);
+                    } catch(e) {
+                        if (silentAudio) {
+                            silentAudio.volume = 1.0;
+                            silentAudio.play().catch(err => {});
+                            setTimeout(() => { silentAudio.volume = 0.01; }, 2000);
+                        }
+                    }
+                };
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(jsCode, null)
+    }
+
     fun removeWebView(scriptName: String) {
         webViewMap[scriptName]?.let { webView ->
             val safeName = scriptName.replace(" ", "_").replace(".", "_")
             val originUrl = "http://127.0.0.1:8080/$safeName/"
             
-            // 1. Clear specific storage
-            WebStorage.getInstance().deleteOrigin(originUrl) 
+            HtmlService.detachWebViewFromOverlay(webView)
             
-            // 2. Kill JS timers (Stop ghost alerts)
+            WebStorage.getInstance().deleteOrigin(originUrl) 
             webView.stopLoading()
             webView.loadUrl("about:blank") 
             webView.clearCache(true)
             webView.clearHistory()
             webView.removeJavascriptInterface("Android")
             
-            // 3. Destroy View
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
         }
