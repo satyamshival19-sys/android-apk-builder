@@ -26,7 +26,6 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        // WebView ko Overlay me bhej do, onPause mat karo
         webView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
             HtmlService.attachWebViewToOverlay(it)
