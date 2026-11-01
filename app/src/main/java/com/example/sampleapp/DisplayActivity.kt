@@ -26,6 +26,7 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        // ऐप मिनिमाइज होते ही WebView को अदृश्य विंडो में भेजें
         webView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
             HtmlService.attachWebViewToOverlay(it)
@@ -34,6 +35,7 @@ class DisplayActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // वापस आते ही WebView को स्क्रीन पर लाएं
         webView?.let {
             HtmlService.detachWebViewFromOverlay(it)
             (it.parent as? ViewGroup)?.removeView(it)
