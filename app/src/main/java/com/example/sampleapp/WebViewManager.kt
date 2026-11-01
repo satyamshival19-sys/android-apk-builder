@@ -30,10 +30,8 @@ object WebViewManager {
             settings.mediaPlaybackRequiresUserGesture = false 
             settings.setSupportMultipleWindows(false)
             
-            // 🔥 HARDWARE ACCELERATION BYPASS
             setLayerType(WebView.LAYER_TYPE_SOFTWARE, null)
             
-            // 🔥 RENDERER PRIORITY
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
             }
@@ -60,7 +58,7 @@ object WebViewManager {
                 }
             }
             
-            // 🔥 NATIVE BRIDGE
+            // 🔥 HTML से Kotlin को जोड़ने वाला ब्रिज
             addJavascriptInterface(WebAppInterface(), "Android")
             
             isFocusable = true
@@ -72,11 +70,9 @@ object WebViewManager {
         return newWebView
     }
 
-    // 🔥 यह क्लास HTML को Kotlin से जोड़ती है
     class WebAppInterface {
         @JavascriptInterface
         fun triggerNativeAlert(message: String) {
-            // HTML से मैसेज आते ही सर्विस को भेज देगा
             HtmlService.triggerNativeAlert(message)
         }
     }
@@ -84,17 +80,12 @@ object WebViewManager {
     private fun injectAntiThrottleScript(webView: WebView) {
         val jsCode = """
             (function() {
+                // OS को धोखा देना
                 Object.defineProperty(document, 'hidden', { get: function() { return false; } });
                 Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
                 document.hasFocus = function() { return true; };
 
-                const workerCode = `setInterval(() => postMessage('tick'), 1000);`;
-                const blob = new Blob([workerCode], { type: 'application/javascript' });
-                const worker = new Worker(URL.createObjectURL(blob));
-                worker.onmessage = function(e) {
-                    if(e.data === 'tick') { window.dispatchEvent(new Event('mousemove')); }
-                };
-
+                // साइलेंट ऑडियो
                 let silentAudio = document.getElementById('__silent_wake__');
                 if (!silentAudio) {
                     silentAudio = document.createElement('audio');
