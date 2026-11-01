@@ -40,6 +40,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         private val overlayViews = HashMap<WebView, FrameLayout>()
         private var instance: HtmlService? = null
 
+        // HTML से अलर्ट आने पर यह कॉल होगा
         fun triggerNativeAlert(message: String) {
             instance?.playNativeAlert(message)
         }
@@ -73,9 +74,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
             try {
                 windowManager?.addView(container, params)
                 overlayViews[webView] = container
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }
 
         fun detachWebViewFromOverlay(webView: WebView) {
@@ -83,9 +82,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
             try {
                 windowManager?.removeView(container)
                 (webView.parent as? ViewGroup)?.removeView(webView)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
             overlayViews.remove(webView)
         }
     }
@@ -121,19 +118,20 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         startHeartbeat()
     }
 
-    // 🔥 यह फंक्शन हर 5 सेकंड में WebView को जगाएगा और Reconnect कराएगा
+    // यह फंक्शन हर 5 सेकंड में WebView को जगाएगा
     private fun startHeartbeat() {
         heartbeatHandler.postDelayed(object : Runnable {
             override fun run() {
                 for (wv in activeWebViews) {
+                    // अगर WebSocket डिस्कनेक्ट हुआ है, तो दोबारा कनेक्ट करने का कमांड भेजें
                     wv.evaluateJavascript("""
                         if (typeof connect === 'function' && (!state.ws || state.ws.readyState !== 1)) {
-                            console.log('Native Wakeup: Reconnecting WebSocket...');
+                            console.log('Native Wakeup: Reconnecting...');
                             connect();
                         }
                     """.trimIndent(), null)
                 }
-                heartbeatHandler.postDelayed(this, 5000) // 5 सेकंड में दोबारा
+                heartbeatHandler.postDelayed(this, 5000)
             }
         }, 5000)
     }
@@ -144,7 +142,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    // 🔥 नेटिव आवाज़ और बीप
+    // असली आवाज़ और बीप बजाने वाला फंक्शन
     fun playNativeAlert(message: String) {
         try {
             mediaPlayer?.release()
@@ -175,9 +173,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
                 val file = File(filesDir, "scripts/$savedScript")
                 if (file.exists()) {
                     val wv = WebViewManager.getOrCreateWebView(applicationContext, savedScript)
-                    if (!activeWebViews.contains(wv)) {
-                        activeWebViews.add(wv)
-                    }
+                    if (!activeWebViews.contains(wv)) activeWebViews.add(wv)
                 }
             }
         }
