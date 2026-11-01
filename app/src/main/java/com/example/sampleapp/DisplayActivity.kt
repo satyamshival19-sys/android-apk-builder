@@ -15,15 +15,10 @@ class DisplayActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Screen ko hamesha on rakhne ke liye
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        
         val scriptName = intent.getStringExtra("SCRIPT_NAME") ?: return finish()
-
         webView = WebViewManager.getOrCreateWebView(this, scriptName)
         (webView?.parent as? ViewGroup)?.removeView(webView)
-        
         container = FrameLayout(this)
         container?.addView(webView)
         setContentView(container)
@@ -31,7 +26,7 @@ class DisplayActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        // Activity pause hote hi WebView ko invisible overlay me bhej dein
+        // WebView ko Overlay me bhej do, onPause mat karo
         webView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
             HtmlService.attachWebViewToOverlay(it)
@@ -40,12 +35,10 @@ class DisplayActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // Wapas aate hi overlay se nikal kar Activity me lagayein
         webView?.let {
             HtmlService.detachWebViewFromOverlay(it)
-            (it.parent as? ViewGroup)?.removeView(it) // Safety clear
+            (it.parent as? ViewGroup)?.removeView(it)
             container?.addView(it)
-            
             Handler(Looper.getMainLooper()).postDelayed({
                 it.onResume()
                 it.resumeTimers()
