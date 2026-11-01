@@ -7,7 +7,9 @@ import android.graphics.PixelFormat
 import android.media.MediaPlayer
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
@@ -26,16 +28,18 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
     private var isUserStopped = false 
     private var server: LocalServer? = null
     
-    // 🔥 ALERT VARIABLES
     private var tts: TextToSpeech? = null
     private var mediaPlayer: MediaPlayer? = null
+    
+    // Heartbeat के लिए
+    private val heartbeatHandler = Handler(Looper.getMainLooper())
+    private val activeWebViews = mutableListOf<WebView>()
 
     companion object {
         private var windowManager: WindowManager? = null
         private val overlayViews = HashMap<WebView, FrameLayout>()
         private var instance: HtmlService? = null
 
-        // 🔥 HTML से कॉल होने वाला फंक्शन
         fun triggerNativeAlert(message: String) {
             instance?.playNativeAlert(message)
         }
@@ -92,7 +96,6 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         createNotificationChannel()
         try { startForeground(1, buildNotification()) } catch (e: Exception) {}
 
-        // TTS Initialize
         tts = TextToSpeech(this, this)
 
         if (server == null) {
@@ -113,17 +116,35 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         }
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        setupWatchdogAlarm()
+        
+        // 🔥 Heartbeat शुरू करें
+        startHeartbeat()
     }
 
-    // TTS इंजन तैयार होने पर
+    // 🔥 यह फंक्शन हर 5 सेकंड में WebView को जगाएगा और Reconnect कराएगा
+    private fun startHeartbeat() {
+        heartbeatHandler.postDelayed(object : Runnable {
+            override fun run() {
+                for (wv in activeWebViews) {
+                    wv.evaluateJavascript("""
+                        if (typeof connect === 'function' && (!state.ws || state.ws.readyState !== 1)) {
+                            console.log('Native Wakeup: Reconnecting WebSocket...');
+                            connect();
+                        }
+                    """.trimIndent(), null)
+                }
+                heartbeatHandler.postDelayed(this, 5000) // 5 सेकंड में दोबारा
+            }
+        }, 5000)
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             tts?.language = Locale.US
         }
     }
 
-    // 🔥 असली आवाज़ और बीप बजाने वाला फंक्शन
+    // 🔥 नेटिव आवाज़ और बीप
     fun playNativeAlert(message: String) {
         try {
             mediaPlayer?.release()
@@ -137,18 +158,6 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun setupWatchdogAlarm() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, HtmlService::class.java)
-        val pendingIntent = PendingIntent.getService(this, 2, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + 60000, pendingIntent)
-        } else {
-            alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + 60000, pendingIntent)
-        }
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP_SERVICE") {
             isUserStopped = true
@@ -159,15 +168,16 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
             return START_NOT_STICKY
         }
 
-        setupWatchdogAlarm()
-
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         for ((key, value) in prefs.all) {
             if (key.startsWith("run_") && value == true) { 
                 val savedScript = key.replace("run_", "")
                 val file = File(filesDir, "scripts/$savedScript")
                 if (file.exists()) {
-                    WebViewManager.getOrCreateWebView(applicationContext, savedScript)
+                    val wv = WebViewManager.getOrCreateWebView(applicationContext, savedScript)
+                    if (!activeWebViews.contains(wv)) {
+                        activeWebViews.add(wv)
+                    }
                 }
             }
         }
@@ -197,6 +207,7 @@ class HtmlService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        heartbeatHandler.removeCallbacksAndMessages(null)
         tts?.shutdown()
         mediaPlayer?.release()
 
