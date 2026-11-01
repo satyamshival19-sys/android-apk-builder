@@ -4,10 +4,12 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.media.MediaPlayer
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -16,16 +18,27 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.util.Locale
 
-class HtmlService : Service() {
+class HtmlService : Service(), TextToSpeech.OnInitListener {
     private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null // 🔥 NAYA: Wi-Fi ko zinda rakhne ke liye
+    private var wifiLock: WifiManager.WifiLock? = null
     private var isUserStopped = false 
     private var server: LocalServer? = null
+    
+    // 🔥 ALERT VARIABLES
+    private var tts: TextToSpeech? = null
+    private var mediaPlayer: MediaPlayer? = null
 
     companion object {
         private var windowManager: WindowManager? = null
         private val overlayViews = HashMap<WebView, FrameLayout>()
+        private var instance: HtmlService? = null
+
+        // 🔥 HTML से कॉल होने वाला फंक्शन
+        fun triggerNativeAlert(message: String) {
+            instance?.playNativeAlert(message)
+        }
 
         fun attachWebViewToOverlay(webView: WebView) {
             if (windowManager == null) {
@@ -75,8 +88,12 @@ class HtmlService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         createNotificationChannel()
         try { startForeground(1, buildNotification()) } catch (e: Exception) {}
+
+        // TTS Initialize
+        tts = TextToSpeech(this, this)
 
         if (server == null) {
             server = LocalServer(applicationContext, 8080)
@@ -89,7 +106,6 @@ class HtmlService : Service() {
             wakeLock?.acquire() 
         }
 
-        // 🔥 WIFI LOCK: Ye OS ko bolta hai ki Wi-Fi ko mat sulao
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         if (wifiLock == null) {
             wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "ScriptApp::WifiLock")
@@ -98,6 +114,27 @@ class HtmlService : Service() {
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         setupWatchdogAlarm()
+    }
+
+    // TTS इंजन तैयार होने पर
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.US
+        }
+    }
+
+    // 🔥 असली आवाज़ और बीप बजाने वाला फंक्शन
+    fun playNativeAlert(message: String) {
+        try {
+            mediaPlayer?.release()
+            mediaPlayer = MediaPlayer.create(this, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+            mediaPlayer?.start()
+            
+            tts?.stop()
+            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "Alert")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun setupWatchdogAlarm() {
@@ -160,6 +197,9 @@ class HtmlService : Service() {
     }
 
     override fun onDestroy() {
+        tts?.shutdown()
+        mediaPlayer?.release()
+
         if (!isUserStopped) {
             val myIntent = Intent(applicationContext, HtmlService::class.java)
             val pendingIntent = PendingIntent.getService(this, 1, myIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
@@ -174,7 +214,7 @@ class HtmlService : Service() {
         server?.stop()
         server = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        if (wifiLock?.isHeld == true) wifiLock?.release() // 🔥 Wifi lock release
+        if (wifiLock?.isHeld == true) wifiLock?.release()
         super.onDestroy()
     }
 }
