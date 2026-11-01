@@ -3,6 +3,7 @@ package com.example.sampleapp
 import android.content.Context
 import android.os.Build
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebStorage
@@ -20,7 +21,6 @@ object WebViewManager {
 
         val file = File(context.filesDir, "scripts/$scriptName")
         val htmlCode = if (file.exists()) file.readText() else "<h1>File Not Found</h1>"
-
         val appContext = context.applicationContext
         
         val newWebView = WebView(appContext).apply {
@@ -30,10 +30,10 @@ object WebViewManager {
             settings.mediaPlaybackRequiresUserGesture = false 
             settings.setSupportMultipleWindows(false)
             
-            // 🔥 1. HARDWARE ACCELERATION BYPASS (Background me JS ko fast rakhne ke liye)
+            // 🔥 HARDWARE ACCELERATION BYPASS
             setLayerType(WebView.LAYER_TYPE_SOFTWARE, null)
             
-            // 🔥 2. RENDERER PRIORITY (यह OS को बताता है कि WebView को IMPORTANT प्राथमिकता दो)
+            // 🔥 RENDERER PRIORITY
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
             }
@@ -49,7 +49,6 @@ object WebViewManager {
                     view?.let { injectAntiThrottleScript(it) }
                 }
 
-                // 🔥 3. CRASH RECOVERY: Agar OS isko marta hai, toh turant restart karo
                 override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                     view?.let {
                         (it.parent as? ViewGroup)?.removeView(it)
@@ -61,7 +60,9 @@ object WebViewManager {
                 }
             }
             
-            addJavascriptInterface(WebAppInterface(appContext), "Android")
+            // 🔥 NATIVE BRIDGE
+            addJavascriptInterface(WebAppInterface(), "Android")
+            
             isFocusable = true
             isFocusableInTouchMode = true
             resumeTimers()
@@ -69,6 +70,15 @@ object WebViewManager {
 
         webViewMap[scriptName] = newWebView
         return newWebView
+    }
+
+    // 🔥 यह क्लास HTML को Kotlin से जोड़ती है
+    class WebAppInterface {
+        @JavascriptInterface
+        fun triggerNativeAlert(message: String) {
+            // HTML से मैसेज आते ही सर्विस को भेज देगा
+            HtmlService.triggerNativeAlert(message)
+        }
     }
 
     private fun injectAntiThrottleScript(webView: WebView) {
@@ -95,20 +105,6 @@ object WebViewManager {
                     document.body.appendChild(silentAudio);
                 }
                 setInterval(() => { if (silentAudio.paused) silentAudio.play().catch(e => {}); }, 3000);
-
-                const originalSpeak = window.speechSynthesis.speak;
-                window.speechSynthesis.speak = function(utterance) {
-                    try {
-                        window.speechSynthesis.resume();
-                        originalSpeak.call(window.speechSynthesis, utterance);
-                    } catch(e) {
-                        if (silentAudio) {
-                            silentAudio.volume = 1.0;
-                            silentAudio.play().catch(err => {});
-                            setTimeout(() => { silentAudio.volume = 0.01; }, 2000);
-                        }
-                    }
-                };
             })();
         """.trimIndent()
         webView.evaluateJavascript(jsCode, null)
