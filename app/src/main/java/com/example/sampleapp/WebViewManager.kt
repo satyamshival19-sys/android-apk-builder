@@ -3,6 +3,7 @@ package com.example.sampleapp
 import android.content.Context
 import android.os.Build
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -28,9 +29,11 @@ object WebViewManager {
             settings.databaseEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false 
             settings.setSupportMultipleWindows(false)
-            settings.loadWithOverviewMode = true
             
-            // 🔥 RENDERER PRIORITY HACK
+            // 🔥 1. HARDWARE ACCELERATION BYPASS (Background me JS ko fast rakhne ke liye)
+            setLayerType(WebView.LAYER_TYPE_SOFTWARE, null)
+            
+            // 🔥 2. RENDERER PRIORITY (यह OS को बताता है कि WebView को IMPORTANT प्राथमिकता दो)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
             }
@@ -40,11 +43,21 @@ object WebViewManager {
             
             webChromeClient = WebChromeClient() 
             
-            // 🔥 JAVASCRIPT INJECTION (Anti-Throttle & Speech Fix)
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     view?.let { injectAntiThrottleScript(it) }
+                }
+
+                // 🔥 3. CRASH RECOVERY: Agar OS isko marta hai, toh turant restart karo
+                override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                    view?.let {
+                        (it.parent as? ViewGroup)?.removeView(it)
+                        it.destroy()
+                    }
+                    webViewMap.remove(scriptName)
+                    getOrCreateWebView(context, scriptName)
+                    return true
                 }
             }
             
@@ -61,23 +74,17 @@ object WebViewManager {
     private fun injectAntiThrottleScript(webView: WebView) {
         val jsCode = """
             (function() {
-                // 1. HTML Visibility Hack (OS ko lagega screen ON hai)
                 Object.defineProperty(document, 'hidden', { get: function() { return false; } });
                 Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
                 document.hasFocus = function() { return true; };
 
-                // 2. WebWorker Hack (Timer throttle rokne ke liye)
                 const workerCode = `setInterval(() => postMessage('tick'), 1000);`;
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 const worker = new Worker(URL.createObjectURL(blob));
                 worker.onmessage = function(e) {
-                    if(e.data === 'tick') {
-                        // Browser thread ko forcefully jagaye rakhe
-                        window.dispatchEvent(new Event('mousemove'));
-                    }
+                    if(e.data === 'tick') { window.dispatchEvent(new Event('mousemove')); }
                 };
 
-                // 3. Silent Audio Hack (Background media block rokne ke liye)
                 let silentAudio = document.getElementById('__silent_wake__');
                 if (!silentAudio) {
                     silentAudio = document.createElement('audio');
@@ -87,15 +94,12 @@ object WebViewManager {
                     silentAudio.volume = 0.01;
                     document.body.appendChild(silentAudio);
                 }
-                setInterval(() => {
-                    if (silentAudio.paused) silentAudio.play().catch(e => {});
-                }, 3000);
+                setInterval(() => { if (silentAudio.paused) silentAudio.play().catch(e => {}); }, 3000);
 
-                // 4. Speech Synthesis Fix (Awaaz na aane ka bug)
                 const originalSpeak = window.speechSynthesis.speak;
                 window.speechSynthesis.speak = function(utterance) {
                     try {
-                        window.speechSynthesis.resume(); // Force resume
+                        window.speechSynthesis.resume();
                         originalSpeak.call(window.speechSynthesis, utterance);
                     } catch(e) {
                         if (silentAudio) {
@@ -114,16 +118,13 @@ object WebViewManager {
         webViewMap[scriptName]?.let { webView ->
             val safeName = scriptName.replace(" ", "_").replace(".", "_")
             val originUrl = "http://127.0.0.1:8080/$safeName/"
-            
             HtmlService.detachWebViewFromOverlay(webView)
-            
             WebStorage.getInstance().deleteOrigin(originUrl) 
             webView.stopLoading()
             webView.loadUrl("about:blank") 
             webView.clearCache(true)
             webView.clearHistory()
             webView.removeJavascriptInterface("Android")
-            
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
         }
