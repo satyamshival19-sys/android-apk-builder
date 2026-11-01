@@ -3,7 +3,6 @@ package com.example.sampleapp
 import android.content.Context
 import android.os.Build
 import android.view.ViewGroup
-import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebStorage
@@ -30,8 +29,8 @@ object WebViewManager {
             settings.mediaPlaybackRequiresUserGesture = false 
             settings.setSupportMultipleWindows(false)
             
+            // 🔥 Hardware Acceleration Bypass & High Priority
             setLayerType(WebView.LAYER_TYPE_SOFTWARE, null)
-            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
             }
@@ -47,6 +46,7 @@ object WebViewManager {
                     view?.let { injectAntiThrottleScript(it) }
                 }
 
+                // अगर OS ज़बरदस्ती WebView मारे, तो उसे रीस्टार्ट करो
                 override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                     view?.let {
                         (it.parent as? ViewGroup)?.removeView(it)
@@ -70,22 +70,15 @@ object WebViewManager {
         return newWebView
     }
 
-    class WebAppInterface {
-        @JavascriptInterface
-        fun triggerNativeAlert(message: String) {
-            HtmlService.triggerNativeAlert(message)
-        }
-    }
-
     private fun injectAntiThrottleScript(webView: WebView) {
         val jsCode = """
             (function() {
-                // OS को धोखा देना
+                // OS को धोखा देना (Visibility Override)
                 Object.defineProperty(document, 'hidden', { get: function() { return false; } });
                 Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
                 document.hasFocus = function() { return true; };
 
-                // साइलेंट ऑडियो
+                // साइलेंट ऑडियो (WebView सोने न पाए)
                 let silentAudio = document.getElementById('__silent_wake__');
                 if (!silentAudio) {
                     silentAudio = document.createElement('audio');
