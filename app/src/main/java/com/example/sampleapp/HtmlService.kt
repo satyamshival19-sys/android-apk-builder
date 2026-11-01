@@ -4,6 +4,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -14,14 +15,11 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.core.app.NotificationCompat
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.os.SystemClock
-import android.widget.Toast
 import java.io.File
 
 class HtmlService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null // 🔥 NAYA: Wi-Fi ko zinda rakhne ke liye
     private var isUserStopped = false 
     private var server: LocalServer? = null
 
@@ -29,7 +27,6 @@ class HtmlService : Service() {
         private var windowManager: WindowManager? = null
         private val overlayViews = HashMap<WebView, FrameLayout>()
 
-        // ZERO-SIZE WINDOW HACK
         fun attachWebViewToOverlay(webView: WebView) {
             if (windowManager == null) {
                 windowManager = webView.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -37,7 +34,7 @@ class HtmlService : Service() {
             if (overlayViews.containsKey(webView)) return
             
             val params = WindowManager.LayoutParams(
-                1, 1, // 1x1 pixel window
+                1, 1, 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
                 else 
@@ -45,7 +42,7 @@ class HtmlService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or 
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, // Screen ko sone se rokega
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, 
                 PixelFormat.TRANSLUCENT
             )
             params.gravity = Gravity.TOP or Gravity.START
@@ -91,9 +88,16 @@ class HtmlService : Service() {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ScriptApp::WakeLock")
             wakeLock?.acquire() 
         }
+
+        // 🔥 WIFI LOCK: Ye OS ko bolta hai ki Wi-Fi ko mat sulao
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        if (wifiLock == null) {
+            wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "ScriptApp::WifiLock")
+            wifiLock?.acquire()
+        }
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        setupWatchdogAlarm() // 🔥 CPU ko jagaye rakhne ke liye
+        setupWatchdogAlarm()
     }
 
     private fun setupWatchdogAlarm() {
@@ -101,11 +105,10 @@ class HtmlService : Service() {
         val intent = Intent(this, HtmlService::class.java)
         val pendingIntent = PendingIntent.getService(this, 2, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         
-        // Har 1 minute me alarm bajega (OS ko lagatar jagata rahega)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60000, pendingIntent)
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + 60000, pendingIntent)
         } else {
-            alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60000, pendingIntent)
+            alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, android.os.SystemClock.elapsedRealtime() + 60000, pendingIntent)
         }
     }
 
@@ -119,7 +122,6 @@ class HtmlService : Service() {
             return START_NOT_STICKY
         }
 
-        // Watchdog ko reset karein
         setupWatchdogAlarm()
 
         val prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
@@ -149,22 +151,12 @@ class HtmlService : Service() {
         val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, "html_alert_channel")
-            .setContentTitle("App Running (100% Immortal)")
-            .setContentText("Scripts are active in background...")
+            .setContentTitle("App Running (Absolute Shield)")
+            .setContentText("Charts and Alerts are fully active...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, "STOP", stopPendingIntent) 
             .build()
-    }
-
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        // 🔥 OS memory clear karne ki koshish karega, hum use ignore karenge
-    }
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        Toast.makeText(applicationContext, "App background mein chalti rahegi...", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroy() {
@@ -174,14 +166,15 @@ class HtmlService : Service() {
             val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarm.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+                alarm.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME, android.os.SystemClock.elapsedRealtime() + 1000, pendingIntent)
             } else {
-                alarm.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+                alarm.set(AlarmManager.ELAPSED_REALTIME, android.os.SystemClock.elapsedRealtime() + 1000, pendingIntent)
             }
         }
         server?.stop()
         server = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
+        if (wifiLock?.isHeld == true) wifiLock?.release() // 🔥 Wifi lock release
         super.onDestroy()
     }
 }
